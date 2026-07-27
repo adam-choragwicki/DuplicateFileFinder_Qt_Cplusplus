@@ -2,6 +2,7 @@
 
 #include "types/scan_type.h"
 #include <QMainWindow>
+#include <ui_main_window.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -27,6 +28,7 @@ public:
 
     [[nodiscard]] ScanType getScanType() const;
     void setDirectoryPathLabel(const QString& directoryPath);
+    [[nodiscard]] QString getDirectoryPath() const { return ui->directoryPath_Label->text(); }
 
 private:
     void initializeUI();

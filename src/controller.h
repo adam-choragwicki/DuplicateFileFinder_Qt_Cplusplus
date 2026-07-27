@@ -2,6 +2,7 @@
 
 #include "model.h"
 #include "main_window.h"
+#include "scanner.h"
 
 class Controller : public QObject
 {
@@ -20,4 +21,6 @@ private slots:
 private:
     Model& model_;
     MainWindow& view_;
+
+    Scanner scanner_;
 };

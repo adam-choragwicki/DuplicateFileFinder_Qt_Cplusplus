@@ -1,5 +1,5 @@
 #include "controller.h"
-
+#include "scan_request.h"
 #include <QFileDialog>
 
 Controller::Controller(Model& model, MainWindow& view) : model_(model), view_(view)
@@ -12,7 +12,9 @@ Controller::Controller(Model& model, MainWindow& view) : model_(model), view_(vi
 
 void Controller::onStartScanButtonClicked()
 {
-    qDebug() << "Start scan clicked";
+    const ScanRequest scanRequest(view_.getDirectoryPath(), view_.getScanType());
+
+    scanner_.scan(scanRequest);
 }
 
 void Controller::onChooseDirectoryButtonClicked()
