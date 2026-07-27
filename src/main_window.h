@@ -3,9 +3,6 @@
 #include "types/scan_type.h"
 #include <QMainWindow>
 
-class QComboBox;
-class QCloseEvent;
-
 QT_BEGIN_NAMESPACE
 
 namespace Ui
@@ -29,6 +26,7 @@ public:
     ~MainWindow() override;
 
     [[nodiscard]] ScanType getScanType() const;
+    void setDirectoryPathLabel(const QString& directoryPath);
 
 private:
     void initializeUI();

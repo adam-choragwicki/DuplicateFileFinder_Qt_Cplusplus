@@ -2,6 +2,7 @@
 #include "ui_main_window.h"
 #include <QComboBox>
 #include <QCloseEvent>
+#include <QDir>
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWindow)
 {
@@ -25,6 +26,8 @@ void MainWindow::initializeUI()
     // Clear placeholder values from combo boxes
     ui->scanType_ComboBox->clear();
 
+    ui->directoryPath_Label->setText(QDir::currentPath());
+
     populateScanTypeComboBox();
 }
 
@@ -38,6 +41,11 @@ void MainWindow::populateScanTypeComboBox()
     {
         ui->scanType_ComboBox->setItemData(i, Qt::AlignCenter, Qt::TextAlignmentRole);
     }
+}
+
+void MainWindow::setDirectoryPathLabel(const QString& directoryPath)
+{
+    ui->directoryPath_Label->setText(directoryPath);
 }
 
 ScanType MainWindow::getScanType() const
