@@ -14,6 +14,7 @@ qt_add_executable(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME}
         PRIVATE
         Qt6::Widgets
+        Qt6::Concurrent
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE

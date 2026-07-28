@@ -19,7 +19,7 @@ public:
 private slots:
     void onStartScanButtonClicked();
     void onChooseDirectoryButtonClicked();
-    void onScanOperationComplete();
+    void onScanOperationComplete(const ScanResult& scanResult);
     void onScanOperationCancelled();
 
 private:

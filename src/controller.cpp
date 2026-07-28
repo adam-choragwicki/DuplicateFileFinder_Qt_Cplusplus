@@ -10,8 +10,8 @@ Controller::Controller(Model& model, MainWindow& view) : model_(model), view_(vi
 
     connect(&view_, &MainWindow::startScanButtonClicked, this, &Controller::onStartScanButtonClicked);
     connect(&view_, &MainWindow::chooseDirectoryButtonClicked, this, &Controller::onChooseDirectoryButtonClicked);
-    connect(&scanner_, &Scanner::operationComplete, this, &Controller::onScanOperationComplete);
-    connect(&scanner_, &Scanner::operationCancelled, this, &Controller::onScanOperationCancelled);
+    connect(&scanner_, &Scanner::scanComplete, this, &Controller::onScanOperationComplete);
+    connect(&scanner_, &Scanner::scanCancelled, this, &Controller::onScanOperationCancelled);
 }
 
 void Controller::onStartScanButtonClicked()
@@ -23,7 +23,12 @@ void Controller::onStartScanButtonClicked()
 
     const ScanRequest scanRequest(view_.getDirectoryPath(), view_.getScanType());
 
-    scanProgressDialog_ = new QProgressDialog("Scanning for duplicate files...", "Cancel", 0, 3000, &view_);
+    scanProgressDialog_ = new QProgressDialog(
+        "Collecting files...",
+        "Cancel",
+        0,
+        Scanner::scanDurationMilliseconds(),
+        &view_);
     scanProgressDialog_->setWindowTitle("Scanning");
     scanProgressDialog_->setWindowModality(Qt::WindowModal);
     scanProgressDialog_->setMinimumDuration(0);
@@ -52,9 +57,10 @@ void Controller::onChooseDirectoryButtonClicked()
     }
 }
 
-void Controller::onScanOperationComplete()
+void Controller::onScanOperationComplete(const ScanResult& scanResult)
 {
     closeScanProgressDialog();
+    view_.showScanResult(scanResult);
 }
 
 void Controller::onScanOperationCancelled()

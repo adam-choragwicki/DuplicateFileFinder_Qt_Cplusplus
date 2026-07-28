@@ -1,6 +1,9 @@
 #pragma once
 
 #include "types/scan_type.h"
+#include "types/scan_result.h"
+#include "types/file_record.h"
+#include <QList>
 #include <QMainWindow>
 #include <ui_main_window.h>
 
@@ -28,6 +31,7 @@ public:
 
     [[nodiscard]] ScanType getScanType() const;
     void setDirectoryPathLabel(const QString& directoryPath);
+    void showScanResult(const ScanResult& scanResult);
     [[nodiscard]] QString getDirectoryPath() const { return ui->directoryPath_Label->text(); }
 
 private:
