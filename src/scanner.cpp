@@ -75,12 +75,17 @@ void Scanner::scan(const ScanRequest& scanRequest)
         }
         else
         {
-            QMap<QString, QList<FileRecord>> filesByName;
-            QDirIterator iterator(rootDirectoryPath,
-                                  QDir::Files | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot,
-                                  QDirIterator::Subdirectories);
+            // Stage 1 - collect files by name recursively
+            const QMap<QString, QList<FileRecord>> filesByName = collectFilesByNameRecursively(rootDirectoryPath, cancellationRequested);
 
-            while (iterator.hasNext())
+            if (cancellationRequested->load())
+            {
+                scanResult.setScanCancelled();
+                return scanResult;
+            }
+
+            // Stage 2 - find which files have non-unique names and group them
+            for (auto iterator = filesByName.cbegin(); iterator != filesByName.cend(); ++iterator)
             {
                 if (cancellationRequested->load())
                 {
@@ -88,14 +93,6 @@ void Scanner::scan(const ScanRequest& scanRequest)
                     return scanResult;
                 }
 
-                iterator.next();
-                const QFileInfo fileInfo = iterator.fileInfo();
-
-                filesByName[fileInfo.fileName()].append(FileRecord(fileInfo.fileName(), fileInfo.absolutePath(), fileInfo.size()));
-            }
-
-            for (auto iterator = filesByName.cbegin(); iterator != filesByName.cend(); ++iterator)
-            {
                 if (iterator.value().size() < 2)
                 {
                     continue;
@@ -141,4 +138,27 @@ void Scanner::cancelScan()
     }
 
     cancellationRequested_->store(true);
+}
+
+QMap<QString, QList<FileRecord>> Scanner::collectFilesByNameRecursively(const QString& rootDirectoryPath, const std::shared_ptr<std::atomic_bool>& cancellationRequested)
+{
+    QMap<QString, QList<FileRecord>> filesByName;
+    QDirIterator iterator(rootDirectoryPath,
+                          QDir::Files | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot,
+                          QDirIterator::Subdirectories);
+
+    while (iterator.hasNext())
+    {
+        if (cancellationRequested->load())
+        {
+            break;
+        }
+
+        iterator.next();
+        const QFileInfo fileInfo = iterator.fileInfo();
+
+        filesByName[fileInfo.fileName()].append(FileRecord(fileInfo.fileName(), fileInfo.absolutePath(), fileInfo.size()));
+    }
+
+    return filesByName;
 }

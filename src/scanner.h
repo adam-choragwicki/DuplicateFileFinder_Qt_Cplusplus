@@ -1,7 +1,11 @@
 #pragma once
 
+#include "types/file_record.h"
 #include "types/scan_result.h"
+
 #include <QFutureWatcher>
+#include <QList>
+#include <QMap>
 #include <QString>
 #include <QTimer>
 
@@ -30,6 +34,8 @@ signals:
     void scanCancelled();
 
 private:
+    [[nodiscard]] static QMap<QString, QList<FileRecord>> collectFilesByNameRecursively(const QString& rootDirectoryPath, const std::shared_ptr<std::atomic_bool>& cancellationRequested);
+
     static constexpr int scanDurationMilliseconds_ = 750;
 
     QTimer progressTimer_;
