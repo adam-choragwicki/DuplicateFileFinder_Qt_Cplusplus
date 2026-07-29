@@ -30,7 +30,11 @@ void MainWindow::initializeUI()
     // Clear placeholder values from combo boxes
     ui->scanType_ComboBox->clear();
 
-    ui->directoryPath_Label->setText(QDir::currentPath());
+    QDir testFilesDirectory{QDir::currentPath()};
+    testFilesDirectory.cdUp();
+    testFilesDirectory.cd("test_files");
+
+    ui->directoryPath_Label->setText(testFilesDirectory.path());
 
     populateScanTypeComboBox();
 }
@@ -56,20 +60,30 @@ void MainWindow::showScanResult(const ScanResult& scanResult)
 {
     ui->results_TableWidget->setSortingEnabled(false);
     ui->results_TableWidget->clearContents();
-    ui->results_TableWidget->setRowCount(scanResult.files.size());
+    ui->results_TableWidget->setRowCount(scanResult.getDuplicateGroups().size());
 
-    for (qsizetype row = 0; row < scanResult.files.size(); ++row)
+    for (qsizetype row = 0; row < scanResult.getDuplicateGroups().size(); ++row)
     {
-        const FileRecord& file = scanResult.files.at(row);
+        const DuplicateGroup& duplicateGroup = scanResult.getDuplicateGroups().at(row);
+        const QList<FileRecord>& files = duplicateGroup.getFiles();
+        QStringList directories;
+        QStringList sizes;
 
-        ui->results_TableWidget->setItem(static_cast<int>(row), 0, new QTableWidgetItem(file.fileName_));
-        ui->results_TableWidget->setItem(static_cast<int>(row), 1, new QTableWidgetItem(file.directoryPath_));
-        ui->results_TableWidget->setItem(static_cast<int>(row), 2, new QTableWidgetItem(QString::number(file.sizeBytes_ / 1024.0, 'f', 2)));
+        for (const FileRecord& file: files)
+        {
+            directories.append(file.directoryPath_);
+            sizes.append(QString::number(file.sizeBytes_ / 1024.0, 'f', 2));
+        }
+
+        ui->results_TableWidget->setItem(static_cast<int>(row), 0, new QTableWidgetItem(files.constFirst().fileName_));
+        ui->results_TableWidget->setItem(static_cast<int>(row), 1, new QTableWidgetItem(directories.join('\n')));
+        ui->results_TableWidget->setItem(static_cast<int>(row), 2, new QTableWidgetItem(sizes.join('\n')));
     }
 
     ui->results_TableWidget->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     ui->results_TableWidget->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
     ui->results_TableWidget->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    ui->results_TableWidget->resizeRowsToContents();
     ui->results_TableWidget->setSortingEnabled(true);
     ui->main_TabWidget->setCurrentWidget(ui->resultsTab);
 }

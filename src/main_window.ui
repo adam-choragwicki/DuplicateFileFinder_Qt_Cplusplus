@@ -154,12 +154,12 @@
           </column>
           <column>
            <property name="text">
-            <string>Folder</string>
+            <string>Folders</string>
            </property>
           </column>
           <column>
            <property name="text">
-            <string>Size (KB)</string>
+            <string>Sizes (KB)</string>
            </property>
           </column>
          </widget>

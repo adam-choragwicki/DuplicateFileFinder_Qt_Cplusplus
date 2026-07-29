@@ -1,10 +1,20 @@
 #pragma once
 
-#include "file_record.h"
+#include "duplicate_group.h"
+
 #include <QList>
 
-struct ScanResult
+class ScanResult
 {
-    QList<FileRecord> files;
-    bool cancelled{};
+public:
+    [[nodiscard]] const QList<DuplicateGroup>& getDuplicateGroups() const { return duplicateGroups; }
+    [[nodiscard]] bool isScanCancelled() const { return scanCancelled; }
+
+    void appendDuplicateGroup(const DuplicateGroup& duplicateGroup) { duplicateGroups.push_back(duplicateGroup); }
+
+    void setScanCancelled() { scanCancelled = true; }
+
+private:
+    QList<DuplicateGroup> duplicateGroups;
+    bool scanCancelled{};
 };

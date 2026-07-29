@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QMap>
 #include <QThread>
 #include <QtConcurrentRun>
 
@@ -24,7 +25,7 @@ Scanner::Scanner(QObject* parent) : QObject(parent)
         progressTimer_.stop();
 
         const ScanResult scanResult = scanWatcher_.result();
-        const bool wasCancelled = scanResult.cancelled || cancellationRequested_->load();
+        const bool wasCancelled = scanResult.isScanCancelled() || cancellationRequested_->load();
         isScanning_ = false;
 
         if (wasCancelled)
@@ -35,7 +36,7 @@ Scanner::Scanner(QObject* parent) : QObject(parent)
         }
 
         emit progressChanged(scanDurationMilliseconds_);
-        qInfo() << "Scan operation complete:" << scanResult.files.size() << "files found";
+        qInfo() << "Scan operation complete:" << scanResult.getDuplicateGroups().size() << "duplicate groups found";
         emit scanComplete(scanResult);
     });
 }
@@ -59,32 +60,60 @@ void Scanner::scan(const ScanRequest& scanRequest)
     progressTimer_.start();
 
     const QString rootDirectoryPath = scanRequest.getRootDirectoryPath();
+    const ScanType scanType = scanRequest.getScanType();
     const std::shared_ptr<std::atomic_bool> cancellationRequested = cancellationRequested_;
 
-    scanWatcher_.setFuture(QtConcurrent::run([rootDirectoryPath, cancellationRequested]
+    scanWatcher_.setFuture(QtConcurrent::run([rootDirectoryPath, scanType, cancellationRequested]
     {
         ScanResult scanResult;
         QElapsedTimer minimumDurationTimer;
         minimumDurationTimer.start();
 
-        QDirIterator iterator(rootDirectoryPath, QDir::Files | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot, QDirIterator::NoIteratorFlags);
-
-        while (iterator.hasNext())
+        if (scanType != ScanType::ByFileName)
         {
-            if (cancellationRequested->load())
+            qWarning() << "Scan by file content is not implemented yet";
+        }
+        else
+        {
+            QMap<QString, QList<FileRecord>> filesByName;
+            QDirIterator iterator(rootDirectoryPath,
+                                  QDir::Files | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot,
+                                  QDirIterator::Subdirectories);
+
+            while (iterator.hasNext())
             {
-                scanResult.cancelled = true;
-                return scanResult;
+                if (cancellationRequested->load())
+                {
+                    scanResult.setScanCancelled();
+                    return scanResult;
+                }
+
+                iterator.next();
+                const QFileInfo fileInfo = iterator.fileInfo();
+
+                filesByName[fileInfo.fileName()].append({
+                    .fileName_ = fileInfo.fileName(),
+                    .directoryPath_ = fileInfo.absolutePath(),
+                    .sizeBytes_ = fileInfo.size()
+                });
             }
 
-            iterator.next();
-            const QFileInfo fileInfo = iterator.fileInfo();
+            for (auto iterator = filesByName.cbegin(); iterator != filesByName.cend(); ++iterator)
+            {
+                if (iterator.value().size() < 2)
+                {
+                    continue;
+                }
 
-            scanResult.files.append({
-                .fileName_ = fileInfo.fileName(),
-                .directoryPath_ = fileInfo.absolutePath(),
-                .sizeBytes_ = fileInfo.size()
-            });
+                DuplicateGroup duplicateGroup;
+
+                for (const FileRecord& file: iterator.value())
+                {
+                    duplicateGroup.addFile(file);
+                }
+
+                scanResult.appendDuplicateGroup(duplicateGroup);
+            }
         }
 
         // Keep the progress dialog visible long enough to provide useful feedback
@@ -92,7 +121,7 @@ void Scanner::scan(const ScanRequest& scanRequest)
         {
             if (cancellationRequested->load())
             {
-                scanResult.cancelled = true;
+                scanResult.setScanCancelled();
                 return scanResult;
             }
 
