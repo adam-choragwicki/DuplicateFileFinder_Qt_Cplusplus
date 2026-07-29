@@ -36,6 +36,8 @@ void MainWindow::initializeUI()
 
     ui->directoryPath_Label->setText(testFilesDirectory.path());
 
+    ui->results_TableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
     populateScanTypeComboBox();
 }
 
