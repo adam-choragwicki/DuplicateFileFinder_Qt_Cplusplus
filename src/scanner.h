@@ -9,8 +9,7 @@
 #include <QString>
 #include <QTimer>
 
-#include <atomic>
-#include <memory>
+#include <stop_token>
 
 class ScanRequest;
 
@@ -34,14 +33,15 @@ signals:
     void scanCancelled();
 
 private:
-    [[nodiscard]] static QMap<QString, QList<FileRecord>> collectFilesByNameRecursively(const QString& rootDirectoryPath, const std::shared_ptr<std::atomic_bool>& cancellationRequested);
-    [[nodiscard]] static ScanResult findDuplicateGroupsByFileName(const QMap<QString, QList<FileRecord>>& filesByName, const std::shared_ptr<std::atomic_bool>& cancellationRequested);
+    [[nodiscard]] static QMap<QString, QList<FileRecord>> collectFilesByNameRecursively(const QString& rootDirectoryPath, const std::stop_token& stopToken);
+    [[nodiscard]] static ScanResult findDuplicateGroupsByFileName(const QMap<QString, QList<FileRecord>>& filesByName, const std::stop_token& stopToken);
 
     static constexpr int scanDurationMilliseconds_ = 750;
 
     QTimer progressTimer_;
     QElapsedTimer elapsedTimer_;
     QFutureWatcher<ScanResult> scanWatcher_;
-    std::shared_ptr<std::atomic_bool> cancellationRequested_;
+    /// Used to stop scan asynchronously
+    std::stop_source stopSource_;
     bool isScanning_{};
 };

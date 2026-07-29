@@ -25,7 +25,7 @@ Scanner::Scanner(QObject* parent) : QObject(parent)
         progressTimer_.stop();
 
         const ScanResult scanResult = scanWatcher_.result();
-        const bool wasCancelled = scanResult.isScanCancelled() || cancellationRequested_->load();
+        const bool wasCancelled = scanResult.isScanCancelled() || stopSource_.stop_requested();
         isScanning_ = false;
 
         if (wasCancelled)
@@ -54,16 +54,16 @@ void Scanner::scan(const ScanRequest& scanRequest)
     qDebug() << "Scan type" << static_cast<int>(scanRequest.getScanType());
 
     isScanning_ = true;
-    cancellationRequested_ = std::make_shared<std::atomic_bool>(false);
+    stopSource_ = std::stop_source();
     elapsedTimer_.start();
     emit progressChanged(0);
     progressTimer_.start();
 
     const QString rootDirectoryPath = scanRequest.getRootDirectoryPath();
     const ScanType scanType = scanRequest.getScanType();
-    const std::shared_ptr<std::atomic_bool> cancellationRequested = cancellationRequested_;
+    const std::stop_token stopToken = stopSource_.get_token();
 
-    scanWatcher_.setFuture(QtConcurrent::run([rootDirectoryPath, scanType, cancellationRequested]
+    scanWatcher_.setFuture(QtConcurrent::run([rootDirectoryPath, scanType, stopToken]
     {
         ScanResult scanResult;
         QElapsedTimer minimumDurationTimer;
@@ -76,16 +76,16 @@ void Scanner::scan(const ScanRequest& scanRequest)
         else
         {
             // Stage 1 - collect files by name recursively
-            const QMap<QString, QList<FileRecord>> filesByName = collectFilesByNameRecursively(rootDirectoryPath, cancellationRequested);
+            const QMap<QString, QList<FileRecord>> filesByName = collectFilesByNameRecursively(rootDirectoryPath, stopToken);
 
-            if (cancellationRequested->load())
+            if (stopToken.stop_requested())
             {
                 scanResult.setScanCancelled();
                 return scanResult;
             }
 
             // Stage 2 - find which files have non-unique names and group them
-            scanResult = findDuplicateGroupsByFileName(filesByName, cancellationRequested);
+            scanResult = findDuplicateGroupsByFileName(filesByName, stopToken);
 
             if (scanResult.isScanCancelled())
             {
@@ -96,7 +96,7 @@ void Scanner::scan(const ScanRequest& scanRequest)
         // Keep the progress dialog visible long enough to provide useful feedback
         while (minimumDurationTimer.elapsed() < scanDurationMilliseconds_)
         {
-            if (cancellationRequested->load())
+            if (stopToken.stop_requested())
             {
                 scanResult.setScanCancelled();
                 return scanResult;
@@ -121,10 +121,10 @@ void Scanner::cancelScan()
         return;
     }
 
-    cancellationRequested_->store(true);
+    stopSource_.request_stop();
 }
 
-QMap<QString, QList<FileRecord>> Scanner::collectFilesByNameRecursively(const QString& rootDirectoryPath, const std::shared_ptr<std::atomic_bool>& cancellationRequested)
+QMap<QString, QList<FileRecord>> Scanner::collectFilesByNameRecursively(const QString& rootDirectoryPath, const std::stop_token& stopToken)
 {
     QMap<QString, QList<FileRecord>> filesByName;
     QDirIterator iterator(rootDirectoryPath,
@@ -133,7 +133,7 @@ QMap<QString, QList<FileRecord>> Scanner::collectFilesByNameRecursively(const QS
 
     while (iterator.hasNext())
     {
-        if (cancellationRequested->load())
+        if (stopToken.stop_requested())
         {
             break;
         }
@@ -147,15 +147,13 @@ QMap<QString, QList<FileRecord>> Scanner::collectFilesByNameRecursively(const QS
     return filesByName;
 }
 
-ScanResult Scanner::findDuplicateGroupsByFileName(
-    const QMap<QString, QList<FileRecord>>& filesByName,
-    const std::shared_ptr<std::atomic_bool>& cancellationRequested)
+ScanResult Scanner::findDuplicateGroupsByFileName(const QMap<QString, QList<FileRecord>>& filesByName, const std::stop_token& stopToken)
 {
     ScanResult scanResult;
 
     for (auto iterator = filesByName.cbegin(); iterator != filesByName.cend(); ++iterator)
     {
-        if (cancellationRequested->load())
+        if (stopToken.stop_requested())
         {
             scanResult.setScanCancelled();
             return scanResult;
