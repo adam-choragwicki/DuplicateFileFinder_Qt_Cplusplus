@@ -91,8 +91,7 @@ void Scanner::scan(const ScanRequest& scanRequest)
                 iterator.next();
                 const QFileInfo fileInfo = iterator.fileInfo();
 
-                filesByName[fileInfo.fileName()].append(
-                    FileRecord(fileInfo.fileName(), fileInfo.absolutePath(), fileInfo.size()));
+                filesByName[fileInfo.fileName()].append(FileRecord(fileInfo.fileName(), fileInfo.absolutePath(), fileInfo.size()));
             }
 
             for (auto iterator = filesByName.cbegin(); iterator != filesByName.cend(); ++iterator)

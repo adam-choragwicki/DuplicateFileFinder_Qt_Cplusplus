@@ -1,10 +1,7 @@
 #pragma once
 
-#include "types/file_record.h"
 #include "types/scan_result.h"
-#include <QElapsedTimer>
 #include <QFutureWatcher>
-#include <QList>
 #include <QString>
 #include <QTimer>
 
