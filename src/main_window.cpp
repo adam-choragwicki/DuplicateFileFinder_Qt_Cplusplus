@@ -77,9 +77,17 @@ void MainWindow::showScanResult(const ScanResult& scanResult)
             sizes.append(QString::number(file.getSizeBytes() / 1024.0, 'f', 2));
         }
 
-        ui->results_TableWidget->setItem(static_cast<int>(row), 0, new QTableWidgetItem(files.constFirst().getFileName()));
-        ui->results_TableWidget->setItem(static_cast<int>(row), 1, new QTableWidgetItem(directories.join('\n')));
-        ui->results_TableWidget->setItem(static_cast<int>(row), 2, new QTableWidgetItem(sizes.join('\n')));
+        auto* fileNameItem = new QTableWidgetItem(files.constFirst().getFileName());
+        auto* directoriesItem = new QTableWidgetItem(directories.join('\n'));
+        auto* sizesItem = new QTableWidgetItem(sizes.join('\n'));
+
+        fileNameItem->setTextAlignment(Qt::AlignCenter);
+        directoriesItem->setTextAlignment(Qt::AlignCenter);
+        sizesItem->setTextAlignment(Qt::AlignCenter);
+
+        ui->results_TableWidget->setItem(static_cast<int>(row), 0, fileNameItem);
+        ui->results_TableWidget->setItem(static_cast<int>(row), 1, directoriesItem);
+        ui->results_TableWidget->setItem(static_cast<int>(row), 2, sizesItem);
     }
 
     ui->results_TableWidget->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
