@@ -35,6 +35,7 @@ signals:
 
 private:
     [[nodiscard]] static QMap<QString, QList<FileRecord>> collectFilesByNameRecursively(const QString& rootDirectoryPath, const std::shared_ptr<std::atomic_bool>& cancellationRequested);
+    [[nodiscard]] static ScanResult findDuplicateGroupsByFileName(const QMap<QString, QList<FileRecord>>& filesByName, const std::shared_ptr<std::atomic_bool>& cancellationRequested);
 
     static constexpr int scanDurationMilliseconds_ = 750;
 

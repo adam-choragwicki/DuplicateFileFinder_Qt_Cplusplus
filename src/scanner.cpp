@@ -85,27 +85,11 @@ void Scanner::scan(const ScanRequest& scanRequest)
             }
 
             // Stage 2 - find which files have non-unique names and group them
-            for (auto iterator = filesByName.cbegin(); iterator != filesByName.cend(); ++iterator)
+            scanResult = findDuplicateGroupsByFileName(filesByName, cancellationRequested);
+
+            if (scanResult.isScanCancelled())
             {
-                if (cancellationRequested->load())
-                {
-                    scanResult.setScanCancelled();
-                    return scanResult;
-                }
-
-                if (iterator.value().size() < 2)
-                {
-                    continue;
-                }
-
-                DuplicateGroup duplicateGroup;
-
-                for (const FileRecord& file: iterator.value())
-                {
-                    duplicateGroup.addFile(file);
-                }
-
-                scanResult.appendDuplicateGroup(duplicateGroup);
+                return scanResult;
             }
         }
 
@@ -161,4 +145,36 @@ QMap<QString, QList<FileRecord>> Scanner::collectFilesByNameRecursively(const QS
     }
 
     return filesByName;
+}
+
+ScanResult Scanner::findDuplicateGroupsByFileName(
+    const QMap<QString, QList<FileRecord>>& filesByName,
+    const std::shared_ptr<std::atomic_bool>& cancellationRequested)
+{
+    ScanResult scanResult;
+
+    for (auto iterator = filesByName.cbegin(); iterator != filesByName.cend(); ++iterator)
+    {
+        if (cancellationRequested->load())
+        {
+            scanResult.setScanCancelled();
+            return scanResult;
+        }
+
+        if (iterator.value().size() < 2)
+        {
+            continue;
+        }
+
+        DuplicateGroup duplicateGroup;
+
+        for (const FileRecord& file: iterator.value())
+        {
+            duplicateGroup.addFile(file);
+        }
+
+        scanResult.appendDuplicateGroup(duplicateGroup);
+    }
+
+    return scanResult;
 }
