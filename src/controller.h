@@ -10,9 +10,6 @@ class Controller : public QObject
 {
     Q_OBJECT
 
-signals:
-    void applicationShutdownRequested();
-
 public:
     Controller(Model& model, MainWindow& view);
 

@@ -12,19 +12,6 @@ Application::Application()
 
     controller_ = std::make_unique<Controller>(*model_, *view_);
 
-    connect(controller_.get(),
-            &Controller::applicationShutdownRequested,
-            this,
-            []()
-            {
-                QMetaObject::invokeMethod(QCoreApplication::instance(),
-                                          []()
-                                          {
-                                              QCoreApplication::quit();
-                                          },
-                                          Qt::QueuedConnection);
-            });
-
     view_->show();
 }
 

@@ -39,6 +39,4 @@ private:
     void populateScanTypeComboBox();
 
     Ui::MainWindow* ui;
-
-    bool isShutdownRequested_{};
 };
