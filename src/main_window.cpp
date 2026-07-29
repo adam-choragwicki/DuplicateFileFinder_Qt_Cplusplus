@@ -71,11 +71,11 @@ void MainWindow::showScanResult(const ScanResult& scanResult)
 
         for (const FileRecord& file: files)
         {
-            directories.append(file.directoryPath_);
-            sizes.append(QString::number(file.sizeBytes_ / 1024.0, 'f', 2));
+            directories.append(file.getDirectoryPath());
+            sizes.append(QString::number(file.getSizeBytes() / 1024.0, 'f', 2));
         }
 
-        ui->results_TableWidget->setItem(static_cast<int>(row), 0, new QTableWidgetItem(files.constFirst().fileName_));
+        ui->results_TableWidget->setItem(static_cast<int>(row), 0, new QTableWidgetItem(files.constFirst().getFileName()));
         ui->results_TableWidget->setItem(static_cast<int>(row), 1, new QTableWidgetItem(directories.join('\n')));
         ui->results_TableWidget->setItem(static_cast<int>(row), 2, new QTableWidgetItem(sizes.join('\n')));
     }
