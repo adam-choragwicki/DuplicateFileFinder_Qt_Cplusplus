@@ -33,8 +33,17 @@ signals:
     void scanCancelled();
 
 private:
-    [[nodiscard]] static QMap<QString, QList<FileRecord>> collectFilesByNameRecursively(const QString& rootDirectoryPath, const std::stop_token& stopToken);
+    struct FileCollectionMetrics
+    {
+        quint64 scannedDirectoriesCount{};
+        quint64 scannedFilesCount{};
+        quint64 totalScannedBytes{};
+    };
+
+    [[nodiscard]] static QMap<QString, QList<FileRecord>> collectFilesByNameRecursively(const QString& rootDirectoryPath, const std::stop_token& stopToken, FileCollectionMetrics& fileCollectionMetrics);
     [[nodiscard]] static ScanResult findDuplicateGroupsByFileName(const QMap<QString, QList<FileRecord>>& filesByName, const std::stop_token& stopToken);
+    [[nodiscard]] static ScanSummary createScanSummary(const FileCollectionMetrics& collectionMetrics, const ScanResult& scanResult, std::chrono::milliseconds duration);
+    static void logScanSummary(const ScanSummary& summary);
 
     static constexpr int scanDurationMilliseconds_ = 750;
 

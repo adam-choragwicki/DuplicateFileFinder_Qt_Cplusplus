@@ -31,12 +31,14 @@ Scanner::Scanner(QObject* parent) : QObject(parent)
         if (wasCancelled)
         {
             qInfo() << "Scan operation cancelled";
+            logScanSummary(scanResult.getScanSummary());
             emit scanCancelled();
             return;
         }
 
         emit progressChanged(scanDurationMilliseconds_);
         qInfo() << "Scan operation complete:" << scanResult.getDuplicateGroups().size() << "duplicate groups found";
+        logScanSummary(scanResult.getScanSummary());
         emit scanComplete(scanResult);
     });
 }
@@ -66,6 +68,7 @@ void Scanner::scan(const ScanRequest& scanRequest)
     scanWatcher_.setFuture(QtConcurrent::run([rootDirectoryPath, scanType, stopToken]
     {
         ScanResult scanResult;
+        FileCollectionMetrics fileCollectionMetrics;
         QElapsedTimer minimumDurationTimer;
         minimumDurationTimer.start();
 
@@ -76,34 +79,39 @@ void Scanner::scan(const ScanRequest& scanRequest)
         else
         {
             // Stage 1 - collect files by name recursively
-            const QMap<QString, QList<FileRecord>> filesByName = collectFilesByNameRecursively(rootDirectoryPath, stopToken);
+            qInfo() << "Scan stage 1 started: collecting files recursively";
+            const QMap<QString, QList<FileRecord>> filesByName = collectFilesByNameRecursively(rootDirectoryPath, stopToken, fileCollectionMetrics);
 
             if (stopToken.stop_requested())
             {
                 scanResult.setScanCancelled();
-                return scanResult;
             }
-
-            // Stage 2 - find which files have non-unique names and group them
-            scanResult = findDuplicateGroupsByFileName(filesByName, stopToken);
-
-            if (scanResult.isScanCancelled())
+            else
             {
-                return scanResult;
+                // Stage 2 - find which files have non-unique names and group them
+                qInfo() << "Scan stage 2 started: grouping files with duplicate names";
+                scanResult = findDuplicateGroupsByFileName(filesByName, stopToken);
             }
         }
 
         // Keep the progress dialog visible long enough to provide useful feedback
-        while (minimumDurationTimer.elapsed() < scanDurationMilliseconds_)
+        while (!scanResult.isScanCancelled() && minimumDurationTimer.elapsed() < scanDurationMilliseconds_)
         {
             if (stopToken.stop_requested())
             {
                 scanResult.setScanCancelled();
-                return scanResult;
+                break;
             }
 
             QThread::msleep(20);
         }
+
+        if (stopToken.stop_requested())
+        {
+            scanResult.setScanCancelled();
+        }
+
+        scanResult.setScanSummary(createScanSummary(fileCollectionMetrics, scanResult, std::chrono::milliseconds(minimumDurationTimer.elapsed())));
 
         return scanResult;
     }));
@@ -124,11 +132,14 @@ void Scanner::cancelScan()
     stopSource_.request_stop();
 }
 
-QMap<QString, QList<FileRecord>> Scanner::collectFilesByNameRecursively(const QString& rootDirectoryPath, const std::stop_token& stopToken)
+QMap<QString, QList<FileRecord>> Scanner::collectFilesByNameRecursively(const QString& rootDirectoryPath, const std::stop_token& stopToken, FileCollectionMetrics& fileCollectionMetrics)
 {
     QMap<QString, QList<FileRecord>> filesByName;
+    const QDir rootDirectory(rootDirectoryPath);
+    fileCollectionMetrics.scannedDirectoriesCount = rootDirectory.exists() ? 1 : 0;
+
     QDirIterator iterator(rootDirectoryPath,
-                          QDir::Files | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot,
+                          QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot,
                           QDirIterator::Subdirectories);
 
     while (iterator.hasNext())
@@ -141,6 +152,19 @@ QMap<QString, QList<FileRecord>> Scanner::collectFilesByNameRecursively(const QS
         iterator.next();
         const QFileInfo fileInfo = iterator.fileInfo();
 
+        if (fileInfo.isDir())
+        {
+            ++fileCollectionMetrics.scannedDirectoriesCount;
+            continue;
+        }
+
+        if (!fileInfo.isFile())
+        {
+            continue;
+        }
+
+        ++fileCollectionMetrics.scannedFilesCount;
+        fileCollectionMetrics.totalScannedBytes += static_cast<quint64>(fileInfo.size());
         filesByName[fileInfo.fileName()].append(FileRecord(fileInfo.fileName(), fileInfo.absolutePath(), fileInfo.size()));
     }
 
@@ -175,4 +199,51 @@ ScanResult Scanner::findDuplicateGroupsByFileName(const QMap<QString, QList<File
     }
 
     return scanResult;
+}
+
+ScanSummary Scanner::createScanSummary(const FileCollectionMetrics& collectionMetrics, const ScanResult& scanResult, const std::chrono::milliseconds duration)
+{
+    quint64 totalFilesInDuplicateGroupsCount = 0;
+    quint64 totalBytesOccupiedByFilesInDuplicateGroups = 0;
+
+    for (const DuplicateGroup& duplicateGroup: scanResult.getDuplicateGroups())
+    {
+        totalFilesInDuplicateGroupsCount += static_cast<quint64>(duplicateGroup.getFiles().size());
+
+        for (const FileRecord& file: duplicateGroup.getFiles())
+        {
+            totalBytesOccupiedByFilesInDuplicateGroups += static_cast<quint64>(file.getSizeBytes());
+        }
+    }
+
+    // Duplicate filenames do not prove identical content, so no bytes are considered safely recoverable in this scan mode.
+    constexpr quint64 totalAmountOfPotentiallyRecoverableBytes = 0;
+
+    return ScanSummary{
+        QDateTime::currentDateTimeUtc(),
+        duration,
+        collectionMetrics.scannedDirectoriesCount,
+        collectionMetrics.scannedFilesCount,
+        collectionMetrics.totalScannedBytes,
+        static_cast<quint64>(scanResult.getDuplicateGroups().size()),
+        totalFilesInDuplicateGroupsCount,
+        totalBytesOccupiedByFilesInDuplicateGroups,
+        totalAmountOfPotentiallyRecoverableBytes
+    };
+}
+
+void Scanner::logScanSummary(const ScanSummary& summary)
+{
+    qInfo() << "Scan summary:";
+    qInfo().noquote() << "  Completed at:"
+            << summary.getCompletedAt().toLocalTime().toString("yyyy-MM-dd hh:mm:ss");
+    qInfo() << "  Duration (ms):" << summary.getDuration().count();
+    qInfo() << "  Scanned directories:" << summary.getScannedDirectoriesCount();
+    qInfo() << "  Scanned files:" << summary.getScannedFilesCount();
+    qInfo() << "  Total scanned bytes:" << summary.getTotalScannedBytes();
+    qInfo() << "  Duplicate groups:" << summary.getDuplicateGroupsCount();
+    qInfo() << "  Files in duplicate groups:" << summary.getTotalFilesInDuplicateGroupsCount();
+    qInfo() << "  Bytes occupied by files in duplicate groups:" << summary.getTotalBytesOccupiedByFilesInDuplicateGroups();
+
+    qInfo() << "  Potentially recoverable bytes:" << summary.getTotalAmountOfPotentiallyRecoverableBytes(); // TODO this is irrelevant for scanning by file name
 }
