@@ -136,7 +136,11 @@ QMap<QString, QList<FileRecord>> Scanner::collectFilesByNameRecursively(const QS
 {
     QMap<QString, QList<FileRecord>> filesByName;
     const QDir rootDirectory(rootDirectoryPath);
-    fileCollectionMetrics.scannedDirectoriesCount = rootDirectory.exists() ? 1 : 0;
+
+    if (rootDirectory.exists())
+    {
+        fileCollectionMetrics.incrementScannedDirectoriesCount();
+    }
 
     QDirIterator iterator(rootDirectoryPath,
                           QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot,
@@ -154,7 +158,7 @@ QMap<QString, QList<FileRecord>> Scanner::collectFilesByNameRecursively(const QS
 
         if (fileInfo.isDir())
         {
-            ++fileCollectionMetrics.scannedDirectoriesCount;
+            fileCollectionMetrics.incrementScannedDirectoriesCount();
             continue;
         }
 
@@ -163,8 +167,8 @@ QMap<QString, QList<FileRecord>> Scanner::collectFilesByNameRecursively(const QS
             continue;
         }
 
-        ++fileCollectionMetrics.scannedFilesCount;
-        fileCollectionMetrics.totalScannedBytes += static_cast<quint64>(fileInfo.size());
+        fileCollectionMetrics.incrementScannedFilesCount();
+        fileCollectionMetrics.addToTotalScannedBytes(fileInfo.size());
         filesByName[fileInfo.fileName()].append(FileRecord(fileInfo.fileName(), fileInfo.absolutePath(), fileInfo.size()));
     }
 
@@ -222,9 +226,9 @@ ScanSummary Scanner::createScanSummary(const FileCollectionMetrics& collectionMe
     return ScanSummary{
         QDateTime::currentDateTimeUtc(),
         duration,
-        collectionMetrics.scannedDirectoriesCount,
-        collectionMetrics.scannedFilesCount,
-        collectionMetrics.totalScannedBytes,
+        collectionMetrics.getScannedDirectoriesCount(),
+        collectionMetrics.getScannedFilesCount(),
+        collectionMetrics.getTotalScannedBytes(),
         static_cast<quint64>(scanResult.getDuplicateGroups().size()),
         totalFilesInDuplicateGroupsCount,
         totalBytesOccupiedByFilesInDuplicateGroups,
