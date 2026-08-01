@@ -24,11 +24,16 @@ Scanner::Scanner(QObject* parent) : QObject(parent)
     {
         progressTimer_.stop();
 
-        const ScanResult scanResult = scanWatcher_.result();
-        const bool wasCancelled = scanResult.isScanCancelled() || stopSource_.stop_requested();
+        ScanResult scanResult = scanWatcher_.result();
+
+        if (stopSource_.stop_requested())
+        {
+            scanResult.setOutcome(ScanOutcome::Cancelled);
+        }
+
         isScanning_ = false;
 
-        if (wasCancelled)
+        if (scanResult.getOutcome() == ScanOutcome::Cancelled)
         {
             qInfo() << "Scan operation cancelled";
             logScanSummary(scanResult.getScanSummary());
@@ -37,7 +42,16 @@ Scanner::Scanner(QObject* parent) : QObject(parent)
         }
 
         emit progressChanged(scanDurationMilliseconds_);
-        qInfo() << "Scan operation complete:" << scanResult.getDuplicateGroups().size() << "duplicate groups found";
+
+        if (scanResult.getOutcome() == ScanOutcome::Failed)
+        {
+            qCritical() << "Scan operation failed";
+        }
+        else
+        {
+            qInfo() << "Scan operation complete:" << scanResult.getDuplicateGroups().size() << "duplicate groups found";
+        }
+
         logScanSummary(scanResult.getScanSummary());
         emit scanComplete(scanResult);
     });
@@ -72,9 +86,17 @@ void Scanner::scan(const ScanRequest& scanRequest)
         QElapsedTimer minimumDurationTimer;
         minimumDurationTimer.start();
 
-        if (scanType != ScanType::ByFileName)
+        const QFileInfo rootDirectoryInfo(rootDirectoryPath);
+
+        if (!rootDirectoryInfo.exists() || !rootDirectoryInfo.isDir() || !rootDirectoryInfo.isReadable())
+        {
+            qCritical() << "Cannot scan directory:" << rootDirectoryPath;
+            scanResult.setOutcome(ScanOutcome::Failed);
+        }
+        else if (scanType != ScanType::ByFileName)
         {
             qWarning() << "Scan by file content is not implemented yet";
+            scanResult.setOutcome(ScanOutcome::Failed);
         }
         else
         {
@@ -84,13 +106,30 @@ void Scanner::scan(const ScanRequest& scanRequest)
 
             if (stopToken.stop_requested())
             {
-                scanResult.setScanCancelled();
+                scanResult.setOutcome(ScanOutcome::Cancelled);
             }
             else
             {
                 // Stage 2 - find which files have non-unique names and group them
                 qInfo() << "Scan stage 2 started: grouping files with duplicate names";
                 scanResult = findDuplicateGroupsByFileName(filesByName, stopToken);
+
+                if (stopToken.stop_requested())
+                {
+                    scanResult.setOutcome(ScanOutcome::Cancelled);
+                }
+                else if (fileCollectionMetrics.getScannedFilesCount() == 0)
+                {
+                    scanResult.setOutcome(ScanOutcome::NoFilesFound);
+                }
+                else if (scanResult.getDuplicateGroups().isEmpty())
+                {
+                    scanResult.setOutcome(ScanOutcome::CompletedWithoutDuplicates);
+                }
+                else
+                {
+                    scanResult.setOutcome(ScanOutcome::CompletedWithDuplicates);
+                }
             }
         }
 
@@ -99,7 +138,7 @@ void Scanner::scan(const ScanRequest& scanRequest)
         {
             if (stopToken.stop_requested())
             {
-                scanResult.setScanCancelled();
+                scanResult.setOutcome(ScanOutcome::Cancelled);
                 break;
             }
 
@@ -108,7 +147,7 @@ void Scanner::scan(const ScanRequest& scanRequest)
 
         if (stopToken.stop_requested())
         {
-            scanResult.setScanCancelled();
+            scanResult.setOutcome(ScanOutcome::Cancelled);
         }
 
         scanResult.setScanSummary(createScanSummary(fileCollectionMetrics, scanResult, std::chrono::milliseconds(minimumDurationTimer.elapsed())));
@@ -183,7 +222,7 @@ ScanResult Scanner::findDuplicateGroupsByFileName(const QMap<QString, QList<File
     {
         if (stopToken.stop_requested())
         {
-            scanResult.setScanCancelled();
+            scanResult.setOutcome(ScanOutcome::Cancelled);
             return scanResult;
         }
 

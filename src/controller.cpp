@@ -2,6 +2,7 @@
 #include "scan_request.h"
 
 #include <QFileDialog>
+#include <QMessageBox>
 #include <QProgressDialog>
 
 Controller::Controller(Model& model, MainWindow& view) : model_(model), view_(view), scanner_(this)
@@ -60,7 +61,37 @@ void Controller::onChooseDirectoryButtonClicked()
 void Controller::onScanOperationComplete(const ScanResult& scanResult)
 {
     closeScanProgressDialog();
-    view_.showScanResult(scanResult);
+
+    switch (scanResult.getOutcome())
+    {
+        case ScanOutcome::CompletedWithDuplicates:
+            view_.showScanResult(scanResult);
+            break;
+
+        case ScanOutcome::CompletedWithoutDuplicates:
+            QMessageBox::information(
+                &view_,
+                "Scan complete",
+                "The scan completed successfully. No duplicate files were found.");
+            break;
+
+        case ScanOutcome::NoFilesFound:
+            QMessageBox::information(
+                &view_,
+                "No files found",
+                "The selected directory and its subdirectories contain no files.");
+            break;
+
+        case ScanOutcome::Failed:
+            QMessageBox::critical(
+                &view_,
+                "Scan failed",
+                "The scan could not be completed. Check the application log for details.");
+            break;
+
+        case ScanOutcome::Cancelled:
+            break;
+    }
 }
 
 void Controller::onScanOperationCancelled()
