@@ -4,10 +4,11 @@
 #include <QDebug>
 #include <QDir>
 #include <QDirIterator>
-#include <QFileInfo>
-#include <QMap>
 #include <QThread>
 #include <QtConcurrentRun>
+
+#include "file_name_scan_workflow.h"
+#include "file_content_scan_workflow.h"
 
 Scanner::Scanner(QObject* parent) : QObject(parent)
 {
@@ -69,6 +70,25 @@ void Scanner::scan(const ScanRequest& scanRequest)
     qDebug() << "Root directory path" << scanRequest.getRootDirectoryPath();
     qDebug() << "Scan type" << static_cast<int>(scanRequest.getScanType());
 
+    // Select the complete control-flow path before any scan work is scheduled.
+    std::shared_ptr<const ScanWorkflow> scanWorkflow;
+
+    switch (scanRequest.getScanType())
+    {
+        case ScanType::ByFileName:
+            scanWorkflow = std::make_shared<FileNameScanWorkflow>();
+            break;
+
+        case ScanType::ByFileContent:
+            scanWorkflow = std::make_shared<FileContentScanWorkflow>();
+            break;
+    }
+
+    if (!scanWorkflow)
+    {
+        qFatal("Unknown ScanType value: %d", scanRequest.getScanType());
+    }
+
     isScanning_ = true;
     stopSource_ = std::stop_source();
     elapsedTimer_.start();
@@ -76,62 +96,14 @@ void Scanner::scan(const ScanRequest& scanRequest)
     progressTimer_.start();
 
     const QString rootDirectoryPath = scanRequest.getRootDirectoryPath();
-    const ScanType scanType = scanRequest.getScanType();
     const std::stop_token stopToken = stopSource_.get_token();
 
-    scanWatcher_.setFuture(QtConcurrent::run([rootDirectoryPath, scanType, stopToken]
+    scanWatcher_.setFuture(QtConcurrent::run([rootDirectoryPath, scanWorkflow, stopToken]
     {
-        ScanResult scanResult;
-        FileCollectionMetrics fileCollectionMetrics;
         QElapsedTimer minimumDurationTimer;
         minimumDurationTimer.start();
 
-        const QFileInfo rootDirectoryInfo(rootDirectoryPath);
-
-        if (!rootDirectoryInfo.exists() || !rootDirectoryInfo.isDir() || !rootDirectoryInfo.isReadable())
-        {
-            qCritical() << "Cannot scan directory:" << rootDirectoryPath;
-            scanResult.setOutcome(ScanOutcome::Failed);
-        }
-        else if (scanType != ScanType::ByFileName)
-        {
-            qWarning() << "Scan by file content is not implemented yet";
-            scanResult.setOutcome(ScanOutcome::Failed);
-        }
-        else
-        {
-            // Stage 1 - collect files by name recursively
-            qInfo() << "Scan stage 1 started: collecting files recursively";
-            const QMap<QString, QList<FileRecord>> filesByName = collectFilesByNameRecursively(rootDirectoryPath, stopToken, fileCollectionMetrics);
-
-            if (stopToken.stop_requested())
-            {
-                scanResult.setOutcome(ScanOutcome::Cancelled);
-            }
-            else
-            {
-                // Stage 2 - find which files have non-unique names and group them
-                qInfo() << "Scan stage 2 started: grouping files with duplicate names";
-                scanResult = findDuplicateGroupsByFileName(filesByName, stopToken);
-
-                if (stopToken.stop_requested())
-                {
-                    scanResult.setOutcome(ScanOutcome::Cancelled);
-                }
-                else if (fileCollectionMetrics.getScannedFilesCount() == 0)
-                {
-                    scanResult.setOutcome(ScanOutcome::NoFilesFound);
-                }
-                else if (scanResult.getDuplicateGroups().isEmpty())
-                {
-                    scanResult.setOutcome(ScanOutcome::CompletedWithoutDuplicates);
-                }
-                else
-                {
-                    scanResult.setOutcome(ScanOutcome::CompletedWithDuplicates);
-                }
-            }
-        }
+        ScanResult scanResult = scanWorkflow->execute(rootDirectoryPath, stopToken);
 
         // Keep the progress dialog visible long enough to provide useful feedback
         while (!scanResult.isScanCancelled() && minimumDurationTimer.elapsed() < scanDurationMilliseconds_)
@@ -149,8 +121,6 @@ void Scanner::scan(const ScanRequest& scanRequest)
         {
             scanResult.setOutcome(ScanOutcome::Cancelled);
         }
-
-        scanResult.setScanSummary(createScanSummary(fileCollectionMetrics, scanResult, std::chrono::milliseconds(minimumDurationTimer.elapsed())));
 
         return scanResult;
     }));
@@ -171,115 +141,10 @@ void Scanner::cancelScan()
     stopSource_.request_stop();
 }
 
-QMap<QString, QList<FileRecord>> Scanner::collectFilesByNameRecursively(const QString& rootDirectoryPath, const std::stop_token& stopToken, FileCollectionMetrics& fileCollectionMetrics)
-{
-    QMap<QString, QList<FileRecord>> filesByName;
-    const QDir rootDirectory(rootDirectoryPath);
-
-    if (rootDirectory.exists())
-    {
-        fileCollectionMetrics.incrementScannedDirectoriesCount();
-    }
-
-    QDirIterator iterator(rootDirectoryPath,
-                          QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot,
-                          QDirIterator::Subdirectories);
-
-    while (iterator.hasNext())
-    {
-        if (stopToken.stop_requested())
-        {
-            break;
-        }
-
-        iterator.next();
-        const QFileInfo fileInfo = iterator.fileInfo();
-
-        if (fileInfo.isDir())
-        {
-            fileCollectionMetrics.incrementScannedDirectoriesCount();
-            continue;
-        }
-
-        if (!fileInfo.isFile())
-        {
-            continue;
-        }
-
-        fileCollectionMetrics.incrementScannedFilesCount();
-        fileCollectionMetrics.addToTotalScannedBytes(fileInfo.size());
-        filesByName[fileInfo.fileName()].append(FileRecord(fileInfo.fileName(), fileInfo.absolutePath(), fileInfo.size()));
-    }
-
-    return filesByName;
-}
-
-ScanResult Scanner::findDuplicateGroupsByFileName(const QMap<QString, QList<FileRecord>>& filesByName, const std::stop_token& stopToken)
-{
-    ScanResult scanResult;
-
-    for (auto iterator = filesByName.cbegin(); iterator != filesByName.cend(); ++iterator)
-    {
-        if (stopToken.stop_requested())
-        {
-            scanResult.setOutcome(ScanOutcome::Cancelled);
-            return scanResult;
-        }
-
-        if (iterator.value().size() < 2)
-        {
-            continue;
-        }
-
-        DuplicateGroup duplicateGroup;
-
-        for (const FileRecord& file: iterator.value())
-        {
-            duplicateGroup.addFile(file);
-        }
-
-        scanResult.appendDuplicateGroup(duplicateGroup);
-    }
-
-    return scanResult;
-}
-
-ScanSummary Scanner::createScanSummary(const FileCollectionMetrics& collectionMetrics, const ScanResult& scanResult, const std::chrono::milliseconds duration)
-{
-    quint64 totalFilesInDuplicateGroupsCount = 0;
-    quint64 totalBytesOccupiedByFilesInDuplicateGroups = 0;
-
-    for (const DuplicateGroup& duplicateGroup: scanResult.getDuplicateGroups())
-    {
-        totalFilesInDuplicateGroupsCount += static_cast<quint64>(duplicateGroup.getFiles().size());
-
-        for (const FileRecord& file: duplicateGroup.getFiles())
-        {
-            totalBytesOccupiedByFilesInDuplicateGroups += static_cast<quint64>(file.getSizeBytes());
-        }
-    }
-
-    // Duplicate filenames do not prove identical content, so no bytes are considered safely recoverable in this scan mode.
-    constexpr quint64 totalAmountOfPotentiallyRecoverableBytes = 0;
-
-    return ScanSummary{
-        QDateTime::currentDateTimeUtc(),
-        duration,
-        collectionMetrics.getScannedDirectoriesCount(),
-        collectionMetrics.getScannedFilesCount(),
-        collectionMetrics.getTotalScannedBytes(),
-        static_cast<quint64>(scanResult.getDuplicateGroups().size()),
-        totalFilesInDuplicateGroupsCount,
-        totalBytesOccupiedByFilesInDuplicateGroups,
-        totalAmountOfPotentiallyRecoverableBytes
-    };
-}
-
 void Scanner::logScanSummary(const ScanSummary& summary)
 {
     qInfo() << "Scan summary:";
-    qInfo().noquote() << "  Completed at:"
-            << summary.getCompletedAt().toLocalTime().toString("yyyy-MM-dd hh:mm:ss");
+    qInfo().noquote() << "  Completed at:" << summary.getCompletedAt().toLocalTime().toString("yyyy-MM-dd hh:mm:ss");
     qInfo() << "  Duration (ms):" << summary.getDuration().count();
     qInfo() << "  Scanned directories:" << summary.getScannedDirectoriesCount();
     qInfo() << "  Scanned files:" << summary.getScannedFilesCount();

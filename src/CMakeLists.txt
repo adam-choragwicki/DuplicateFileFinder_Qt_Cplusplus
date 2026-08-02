@@ -9,6 +9,9 @@ qt_add_executable(${PROJECT_NAME}
         log_manager.cpp log_manager.h
         scanner.cpp scanner.h
         scan_request.h
+        scan_workflow.h
+        file_name_scan_workflow.h file_name_scan_workflow.cpp
+        file_content_scan_workflow.h file_content_scan_workflow.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}
