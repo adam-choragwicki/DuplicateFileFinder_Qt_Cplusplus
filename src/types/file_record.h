@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QString>
+#include <QDir>
 
 class FileRecord
 {
@@ -11,6 +11,7 @@ public:
 
     [[nodiscard]] const QString& getFileName() const { return fileName_; }
     [[nodiscard]] const QString& getDirectoryPath() const { return directoryPath_; }
+    [[nodiscard]] QString getAbsoluteFilePath() const { return QDir(directoryPath_).filePath(fileName_); }
     [[nodiscard]] qint64 getSizeBytes() const { return sizeBytes_; }
 
 private:
