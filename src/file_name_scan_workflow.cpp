@@ -13,7 +13,7 @@ ScanResult FileNameScanWorkflow::execute(const QString& rootDirectoryPath, const
     ScanOutcome outcome = ScanOutcome::Failed;
     QHash<QString, QList<FileRecord>> filesByName;
 
-    qInfo() << "File name scan stage 1 started: collecting files recursively";
+    qInfo() << "File name scan stage 1 started: collecting files and grouping them by name";
     const FileCollectionResult fileCollectionResult = FileCollector::collectRecursively(
         rootDirectoryPath,
         stopToken,
