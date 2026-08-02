@@ -32,7 +32,55 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
     {
         qInfo() << "File content scan stage 2 started: hashing candidates and verifying matching hashes";
 
-        // TODO next steps
+        bool fileAccessFailed = false;
+
+        for (auto sizeIterator = filesBySize.cbegin(); sizeIterator != filesBySize.cend() && !fileAccessFailed; ++sizeIterator)
+        {
+            if (stopToken.stop_requested())
+            {
+                break;
+            }
+
+            const QList<FileRecord>& equalSizeFiles = sizeIterator.value();
+
+            // A unique file size cannot have a duplicate, so do not perform any file I/O for it.
+            if (equalSizeFiles.size() < 2)
+            {
+                continue;
+            }
+
+            QHash<QByteArray, QList<FileRecord>> filesByHash;
+
+            for (const FileRecord& file: equalSizeFiles)
+            {
+                if (stopToken.stop_requested())
+                {
+                    break;
+                }
+
+                // TODO add hashing step
+            }
+
+            if (stopToken.stop_requested() || fileAccessFailed)
+            {
+                break;
+            }
+
+            // TODO add verification
+        }
+
+        if (stopToken.stop_requested())
+        {
+            outcome = ScanOutcome::Cancelled;
+        }
+        else if (fileAccessFailed)
+        {
+            outcome = ScanOutcome::Failed;
+        }
+        else
+        {
+            outcome = classifySuccessfulScan(collectionResult.getMetrics(), duplicateGroups);
+        }
     }
 
     const DuplicateGroupMetrics duplicateMetrics = calculateDuplicateGroupMetrics(duplicateGroups);
