@@ -152,6 +152,4 @@ void Scanner::logScanSummary(const ScanSummary& summary)
     qInfo() << "  Duplicate groups:" << summary.getDuplicateGroupsCount();
     qInfo() << "  Files in duplicate groups:" << summary.getTotalFilesInDuplicateGroupsCount();
     qInfo() << "  Bytes occupied by files in duplicate groups:" << summary.getTotalBytesOccupiedByFilesInDuplicateGroups();
-
-    qInfo() << "  Potentially recoverable bytes:" << summary.getTotalAmountOfPotentiallyRecoverableBytes(); // TODO this is irrelevant for scanning by file name
 }

@@ -18,8 +18,7 @@ public:
         const quint64 totalScannedBytes,
         const quint64 duplicateGroupsCount,
         const quint64 totalFilesInDuplicateGroupsCount,
-        const quint64 totalBytesOccupiedByFilesInDuplicateGroups,
-        const quint64 totalAmountOfPotentiallyRecoverableBytes)
+        const quint64 totalBytesOccupiedByFilesInDuplicateGroups)
         : completedAt_(completedAt),
           duration_(duration),
           scannedDirectoriesCount_(scannedDirectoriesCount),
@@ -27,8 +26,7 @@ public:
           totalScannedBytes_(totalScannedBytes),
           duplicateGroupsCount_(duplicateGroupsCount),
           totalFilesInDuplicateGroupsCount_(totalFilesInDuplicateGroupsCount),
-          totalBytesOccupiedByFilesInDuplicateGroups_(totalBytesOccupiedByFilesInDuplicateGroups),
-          totalAmountOfPotentiallyRecoverableBytes_(totalAmountOfPotentiallyRecoverableBytes)
+          totalBytesOccupiedByFilesInDuplicateGroups_(totalBytesOccupiedByFilesInDuplicateGroups)
     {}
 
     [[nodiscard]] const QDateTime& getCompletedAt() const { return completedAt_; }
@@ -39,7 +37,6 @@ public:
     [[nodiscard]] quint64 getDuplicateGroupsCount() const { return duplicateGroupsCount_; }
     [[nodiscard]] quint64 getTotalFilesInDuplicateGroupsCount() const { return totalFilesInDuplicateGroupsCount_; }
     [[nodiscard]] quint64 getTotalBytesOccupiedByFilesInDuplicateGroups() const { return totalBytesOccupiedByFilesInDuplicateGroups_; }
-    [[nodiscard]] quint64 getTotalAmountOfPotentiallyRecoverableBytes() const { return totalAmountOfPotentiallyRecoverableBytes_; }
 
 private:
     QDateTime completedAt_;
@@ -50,5 +47,4 @@ private:
     quint64 duplicateGroupsCount_{};
     quint64 totalFilesInDuplicateGroupsCount_{};
     quint64 totalBytesOccupiedByFilesInDuplicateGroups_{};
-    quint64 totalAmountOfPotentiallyRecoverableBytes_{};
 };

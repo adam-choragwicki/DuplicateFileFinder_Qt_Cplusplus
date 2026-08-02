@@ -9,17 +9,21 @@
 class ScanResult
 {
 public:
-    [[nodiscard]] const QList<DuplicateGroup>& getDuplicateGroups() const { return duplicateGroups; }
-    [[nodiscard]] const ScanSummary& getScanSummary() const { return scanSummary; }
-    [[nodiscard]] ScanOutcome getOutcome() const { return outcome; }
-    [[nodiscard]] bool isScanCancelled() const { return outcome == ScanOutcome::Cancelled; }
+    ScanResult(QList<DuplicateGroup> duplicateGroups, const ScanOutcome outcome, ScanSummary scanSummary)
+        : duplicateGroups_(std::move(duplicateGroups)),
+          scanSummary_(std::move(scanSummary)),
+          outcome_(outcome)
+    {}
 
-    void appendDuplicateGroup(const DuplicateGroup& duplicateGroup) { duplicateGroups.push_back(duplicateGroup); }
-    void setScanSummary(const ScanSummary& summary) { scanSummary = summary; }
-    void setOutcome(const ScanOutcome outcomeValue) { outcome = outcomeValue; }
+    [[nodiscard]] const QList<DuplicateGroup>& getDuplicateGroups() const { return duplicateGroups_; }
+    [[nodiscard]] const ScanSummary& getScanSummary() const { return scanSummary_; }
+    [[nodiscard]] ScanOutcome getOutcome() const { return outcome_; }
+    [[nodiscard]] bool isScanCancelled() const { return outcome_ == ScanOutcome::Cancelled; }
+
+    void setOutcome(const ScanOutcome outcomeValue) { outcome_ = outcomeValue; }
 
 private:
-    QList<DuplicateGroup> duplicateGroups;
-    ScanSummary scanSummary;
-    ScanOutcome outcome{ScanOutcome::Failed};
+    QList<DuplicateGroup> duplicateGroups_;
+    ScanSummary scanSummary_;
+    ScanOutcome outcome_;
 };
