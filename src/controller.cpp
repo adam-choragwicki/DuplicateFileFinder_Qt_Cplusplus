@@ -1,9 +1,13 @@
 #include "controller.h"
 #include "scan_request.h"
 
+#include <QCoreApplication>
+#include <QEventLoop>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QProgressDialog>
+
+#include <limits>
 
 Controller::Controller(Model& model, MainWindow& view) : model_(model), view_(view), scanner_(this)
 {
@@ -11,6 +15,7 @@ Controller::Controller(Model& model, MainWindow& view) : model_(model), view_(vi
 
     connect(&view_, &MainWindow::startScanButtonClicked, this, &Controller::onStartScanButtonClicked);
     connect(&view_, &MainWindow::chooseDirectoryButtonClicked, this, &Controller::onChooseDirectoryButtonClicked);
+    connect(&scanner_, &Scanner::progressChanged, this, &Controller::onScanProgressChanged);
     connect(&scanner_, &Scanner::scanComplete, this, &Controller::onScanOperationComplete);
     connect(&scanner_, &Scanner::scanCancelled, this, &Controller::onScanOperationCancelled);
 }
@@ -25,10 +30,10 @@ void Controller::onStartScanButtonClicked()
     const ScanRequest scanRequest(view_.getDirectoryPath(), view_.getScanType());
 
     scanProgressDialog_ = new QProgressDialog(
-        "Collecting files...",
+        "Preparing scan...",
         "Cancel",
         0,
-        Scanner::scanDurationMilliseconds(),
+        0,
         &view_);
     scanProgressDialog_->setWindowTitle("Scanning");
     scanProgressDialog_->setWindowModality(Qt::WindowModal);
@@ -37,7 +42,12 @@ void Controller::onStartScanButtonClicked()
     scanProgressDialog_->setAutoReset(false);
 
     connect(scanProgressDialog_, &QProgressDialog::canceled, &scanner_, &Scanner::cancelScan);
-    connect(&scanner_, &Scanner::progressChanged, scanProgressDialog_, &QProgressDialog::setValue);
+
+    // QProgressDialog normally waits for control to return to the event loop before painting.
+    // Show and paint the initial state first so thread-pool startup or other scan preparation can
+    // never leave the user looking at an unchanged main window after clicking Start scan.
+    scanProgressDialog_->show();
+    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
 
     scanner_.scan(scanRequest);
 }
@@ -56,6 +66,51 @@ void Controller::onChooseDirectoryButtonClicked()
     {
         qWarning() << "Directory path is empty";
     }
+}
+
+void Controller::onScanProgressChanged(const ScanProgress& progress)
+{
+    if (!scanProgressDialog_)
+    {
+        return;
+    }
+
+    QString progressText = scanPhaseDescription(progress.phase);
+
+    if (!progress.totalFilesCount.has_value())
+    {
+        // A directory must be enumerated before its total number of files is known. Keep the
+        // progress bar indeterminate during that single pass, but still expose the live count.
+        scanProgressDialog_->setRange(0, 0);
+        progressText += QStringLiteral("\nProcessed %1/? files").arg(progress.processedFilesCount);
+    }
+    else
+    {
+        const quint64 totalFiles = *progress.totalFilesCount;
+        const quint64 processedFiles = qMin(progress.processedFilesCount, totalFiles);
+        progressText += QStringLiteral("\nProcessed %1/%2 files").arg(processedFiles).arg(totalFiles);
+
+        if (totalFiles == 0)
+        {
+            scanProgressDialog_->setRange(0, 1);
+            scanProgressDialog_->setValue(1);
+        }
+        else if (totalFiles <= static_cast<quint64>(std::numeric_limits<int>::max()))
+        {
+            scanProgressDialog_->setRange(0, static_cast<int>(totalFiles));
+            scanProgressDialog_->setValue(static_cast<int>(processedFiles));
+        }
+        else
+        {
+            // QProgressDialog uses int ranges. Scale exceptionally large file counts while keeping the exact 64-bit values in the text shown to the user.
+            constexpr int scaledMaximum = 1'000'000;
+            const auto scaledValue = static_cast<int>(static_cast<long double>(processedFiles) / static_cast<long double>(totalFiles) * scaledMaximum);
+            scanProgressDialog_->setRange(0, scaledMaximum);
+            scanProgressDialog_->setValue(scaledValue);
+        }
+    }
+
+    scanProgressDialog_->setLabelText(progressText);
 }
 
 void Controller::onScanOperationComplete(const ScanResult& scanResult)

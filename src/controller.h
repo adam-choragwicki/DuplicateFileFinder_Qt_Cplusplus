@@ -16,6 +16,7 @@ public:
 private slots:
     void onStartScanButtonClicked();
     void onChooseDirectoryButtonClicked();
+    void onScanProgressChanged(const ScanProgress& progress);
     void onScanOperationComplete(const ScanResult& scanResult);
     void onScanOperationCancelled();
 

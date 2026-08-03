@@ -5,24 +5,30 @@
 #include "scan_summary/scan_summary_logger.h"
 
 #include <QDebug>
-#include <QDir>
-#include <QDirIterator>
-#include <QThread>
 #include <QtConcurrentRun>
+#include <mutex>
 
-Scanner::Scanner(QObject* parent) : QObject(parent)
+struct Scanner::ProgressState
+{
+    // ScanProgress is written by the background scan thread and polled by the UI thread.
+    // Protect the whole value so readers see one coherent phase/count snapshot instead of fields from two
+    // different updates; accessing it concurrently without synchronization would be a data race.
+    std::mutex mutex;
+    ScanProgress progress;
+};
+
+Scanner::Scanner(QObject* parent) : QObject(parent), progressState_(std::make_shared<ProgressState>())
 {
     progressTimer_.setInterval(50);
 
     connect(&progressTimer_, &QTimer::timeout, this, [this]
     {
-        const int elapsedMilliseconds = qMin(static_cast<int>(elapsedTimer_.elapsed()), scanDurationMilliseconds_);
-
-        emit progressChanged(elapsedMilliseconds);
+        emitCurrentProgress();
     });
 
     connect(&scanWatcher_, &QFutureWatcher<ScanResult>::finished, this, [this]
     {
+        emitCurrentProgress();
         progressTimer_.stop();
 
         ScanResult scanResult = scanWatcher_.result();
@@ -41,8 +47,6 @@ Scanner::Scanner(QObject* parent) : QObject(parent)
             emit scanCancelled();
             return;
         }
-
-        emit progressChanged(scanDurationMilliseconds_);
 
         if (scanResult.getOutcome() == ScanOutcome::Failed)
         {
@@ -91,32 +95,30 @@ void Scanner::scan(const ScanRequest& scanRequest)
 
     isScanning_ = true;
     stopSource_ = std::stop_source();
-    elapsedTimer_.start();
-    emit progressChanged(0);
+
+    {
+        // UI-side write: use the same lock as later worker updates and timer snapshots.
+        const std::lock_guard lock(progressState_->mutex);
+        progressState_->progress = {.phase = ScanPhase::EnumeratingFiles, .processedFilesCount = 0, .totalFilesCount = std::nullopt};
+    }
+
+    emitCurrentProgress();
     progressTimer_.start();
 
     const QString rootDirectoryPath = scanRequest.getRootDirectoryPath();
     const std::stop_token stopToken = stopSource_.get_token();
+    const std::shared_ptr<ProgressState> progressState = progressState_;
 
-    scanWatcher_.setFuture(QtConcurrent::run([rootDirectoryPath, scanWorkflow, stopToken]
+    scanWatcher_.setFuture(QtConcurrent::run([rootDirectoryPath, scanWorkflow, stopToken, progressState]
     {
-        // TODO remove minimum duration
-        QElapsedTimer minimumDurationTimer;
-        minimumDurationTimer.start();
-
-        ScanResult scanResult = scanWorkflow->execute(rootDirectoryPath, stopToken);
-
-        // Keep the progress dialog visible long enough to provide useful feedback
-        while (!scanResult.isScanCancelled() && minimumDurationTimer.elapsed() < scanDurationMilliseconds_)
+        const ScanProgressCallback scanProgressCallback = [progressState](const ScanProgress& progress)
         {
-            if (stopToken.stop_requested())
-            {
-                scanResult.setOutcome(ScanOutcome::Cancelled);
-                break;
-            }
+            // Worker-side write: the UI timer may take a snapshot at the same time.
+            const std::lock_guard lock(progressState->mutex);
+            progressState->progress = progress;
+        };
 
-            QThread::msleep(20);
-        }
+        ScanResult scanResult = scanWorkflow->execute(rootDirectoryPath, stopToken, scanProgressCallback);
 
         if (stopToken.stop_requested())
         {
@@ -125,6 +127,20 @@ void Scanner::scan(const ScanRequest& scanRequest)
 
         return scanResult;
     }));
+}
+
+void Scanner::emitCurrentProgress()
+{
+    ScanProgress progress;
+
+    {
+        // UI-side read: copy all fields while locked, then release the mutex before emitting the
+        // signal so connected UI code never runs while the shared state is locked.
+        const std::lock_guard lock(progressState_->mutex);
+        progress = progressState_->progress;
+    }
+
+    emit progressChanged(progress);
 }
 
 bool Scanner::isScanning() const

@@ -3,7 +3,7 @@
 #include "scan_summary/file_content_scan_summary.h"
 #include <QElapsedTimer>
 
-ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, const std::stop_token& stopToken) const
+ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, const std::stop_token& stopToken, const ScanProgressCallback& scanProgressCallback) const
 {
     QElapsedTimer durationTimer;
     durationTimer.start();
@@ -11,17 +11,23 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
     QList<DuplicateGroup> duplicateGroups;
     ScanOutcome outcome = ScanOutcome::Failed;
     QHash<qint64, QList<FileRecord>> filesBySize;
+    quint64 enumeratedFilesCount = 0;
 
     qInfo() << "Started scan based on file content";
+
+    scanProgressCallback({.phase = ScanPhase::EnumeratingFiles, .processedFilesCount = 0, .totalFilesCount = std::nullopt});
 
     // Stage 1: Collecting files and grouping them by size
     const FileCollectionResult collectionResult = FileCollector::collectRecursively(
         rootDirectoryPath,
         stopToken,
-        [&filesBySize](FileRecord file)
+        [&filesBySize, &enumeratedFilesCount, &scanProgressCallback](FileRecord file)
         {
             // visitor collecting files and grouping them by size
             filesBySize[file.getSizeBytes()].append(std::move(file));
+            ++enumeratedFilesCount;
+
+            scanProgressCallback({ScanPhase::EnumeratingFiles, enumeratedFilesCount, std::nullopt});
         });
 
     if (collectionResult.getStatus() == FileCollectionStatus::InvalidRootDirectory)
@@ -35,6 +41,39 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
     else
     {
         bool fileAccessFailed = false;
+        quint64 duplicateCandidateFilesCount = 0;
+        quint64 filesCheckedBySizeCount = 0;
+        const quint64 collectedFilesCount = collectionResult.getMetrics().getScannedFilesCount();
+
+        scanProgressCallback({.phase = ScanPhase::IdentifyingEqualSizeCandidates, .processedFilesCount = 0, .totalFilesCount = collectedFilesCount});
+
+        // Count the files that need hashing first. This is an in-memory pass over the size groups,
+        // so it gives the hashing phase an exact total without performing any additional file I/O.
+        for (auto sizeIterator = filesBySize.cbegin(); sizeIterator != filesBySize.cend(); ++sizeIterator)
+        {
+            if (stopToken.stop_requested())
+            {
+                break;
+            }
+
+            const auto filesInSizeGroup = static_cast<quint64>(sizeIterator.value().size());
+
+            if (filesInSizeGroup >= 2)
+            {
+                duplicateCandidateFilesCount += filesInSizeGroup;
+            }
+
+            filesCheckedBySizeCount += filesInSizeGroup;
+
+            scanProgressCallback({.phase = ScanPhase::IdentifyingEqualSizeCandidates, .processedFilesCount = filesCheckedBySizeCount, .totalFilesCount = collectedFilesCount});
+        }
+
+        quint64 hashedCandidateFilesCount = 0;
+
+        if (!stopToken.stop_requested() && scanProgressCallback)
+        {
+            scanProgressCallback({.phase = ScanPhase::HashingDuplicateCandidateFiles, .processedFilesCount = 0, .totalFilesCount = duplicateCandidateFilesCount});
+        }
 
         for (auto sizeIterator = filesBySize.cbegin(); sizeIterator != filesBySize.cend() && !fileAccessFailed; ++sizeIterator)
         {
@@ -75,6 +114,9 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
                 }
 
                 filesByHash[*fileHashValue].append(file);
+                ++hashedCandidateFilesCount;
+
+                scanProgressCallback({.phase = ScanPhase::HashingDuplicateCandidateFiles, .processedFilesCount = hashedCandidateFilesCount, .totalFilesCount = duplicateCandidateFilesCount});
             }
 
             if (stopToken.stop_requested() || fileAccessFailed)
@@ -119,6 +161,8 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
         else
         {
             outcome = classifySuccessfulScan(collectionResult.getMetrics(), duplicateGroups);
+
+            scanProgressCallback({.phase = ScanPhase::BuildingScanResult, .processedFilesCount = collectedFilesCount, .totalFilesCount = collectedFilesCount});
         }
     }
 

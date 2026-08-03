@@ -1,10 +1,12 @@
 #pragma once
 
+#include "scan_progress.h"
 #include "types/scan_result.h"
 
 #include <QFutureWatcher>
 #include <QString>
 #include <QTimer>
+#include <memory>
 #include <stop_token>
 
 class ScanRequest;
@@ -18,23 +20,23 @@ public:
 
     void scan(const ScanRequest& scanRequest);
     [[nodiscard]] bool isScanning() const;
-    [[nodiscard]] static constexpr int scanDurationMilliseconds() { return scanDurationMilliseconds_; }
 
 public slots:
     void cancelScan();
 
 signals:
-    void progressChanged(int elapsedMilliseconds);
+    void progressChanged(const ScanProgress& progress);
     void scanComplete(const ScanResult& scanResult);
     void scanCancelled();
 
 private:
-    static constexpr int scanDurationMilliseconds_ = 750;
+    struct ProgressState;
+
+    void emitCurrentProgress();
 
     QTimer progressTimer_;
-    QElapsedTimer elapsedTimer_;
     QFutureWatcher<ScanResult> scanWatcher_;
-    /// Used to stop scan asynchronously
-    std::stop_source stopSource_;
+    std::shared_ptr<ProgressState> progressState_;
+    std::stop_source stopSource_; /// Used to stop scan asynchronously
     bool isScanning_{};
 };
