@@ -100,6 +100,7 @@ void Scanner::scan(const ScanRequest& scanRequest)
 
     scanWatcher_.setFuture(QtConcurrent::run([rootDirectoryPath, scanWorkflow, stopToken]
     {
+        // TODO remove minimum duration
         QElapsedTimer minimumDurationTimer;
         minimumDurationTimer.start();
 
