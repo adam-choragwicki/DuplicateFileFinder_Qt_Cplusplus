@@ -1,9 +1,6 @@
 #include "file_content_scan_workflow.h"
+#include "file_hasher.h"
 #include <QElapsedTimer>
-#include <QCryptographicHash>
-
-FileContentScanWorkflow::FileContentScanWorkflow() : fileHasher_(calculateFileHash)
-{}
 
 ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, const std::stop_token& stopToken) const
 {
@@ -63,7 +60,7 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
                     break;
                 }
 
-                const std::optional<QByteArray> fileHashValue = fileHasher_(file, stopToken);
+                const std::optional<QByteArray> fileHashValue = FileHasher::calculateFileHash(file, stopToken);
 
                 if (!fileHashValue.has_value())
                 {
@@ -137,53 +134,4 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
     };
 
     return ScanResult(std::move(duplicateGroups), outcome, std::move(summary));
-}
-
-std::optional<QByteArray> FileContentScanWorkflow::calculateFileHash(const FileRecord& file, const std::stop_token& stopToken)
-{
-    constexpr qint64 fileReadBufferSize = 1024 * 1024;
-
-    if (stopToken.stop_requested())
-    {
-        return std::nullopt;
-    }
-
-    QFile inputFile(file.getAbsoluteFilePath());
-
-    if (!inputFile.open(QIODevice::ReadOnly))
-    {
-        qWarning() << "Cannot hash file:" << inputFile.fileName() << '-' << inputFile.errorString();
-        return std::nullopt;
-    }
-
-    QCryptographicHash hash(QCryptographicHash::Sha256);
-    const qint64 bufferSize = std::min(fileReadBufferSize, std::max<qint64>(file.getSizeBytes(), 1));
-    QByteArray buffer(bufferSize, '\0');
-    qint64 totalBytesRead = 0;
-
-    while (!inputFile.atEnd())
-    {
-        if (stopToken.stop_requested())
-        {
-            return std::nullopt;
-        }
-
-        const qint64 bytesRead = inputFile.read(buffer.data(), buffer.size());
-
-        if (bytesRead < 0)
-        {
-            qWarning() << "Cannot read file while hashing:" << inputFile.fileName() << '-' << inputFile.errorString();
-            return std::nullopt;
-        }
-
-        if (bytesRead == 0)
-        {
-            break;
-        }
-
-        hash.addData(QByteArrayView(buffer.constData(), bytesRead));
-        totalBytesRead += bytesRead;
-    }
-
-    return hash.result();
 }

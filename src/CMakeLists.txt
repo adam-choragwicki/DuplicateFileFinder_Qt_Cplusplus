@@ -13,6 +13,7 @@ qt_add_executable(${PROJECT_NAME}
         file_name_scan_workflow.h file_name_scan_workflow.cpp
         file_content_scan_workflow.h file_content_scan_workflow.cpp
         file_collector.cpp file_collector.h
+        file_hasher.h
 )
 
 target_link_libraries(${PROJECT_NAME}
