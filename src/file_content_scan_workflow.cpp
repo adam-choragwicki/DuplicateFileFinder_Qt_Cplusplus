@@ -46,7 +46,7 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
             const QList<FileRecord>& equalSizeFiles = sizeIterator.value();
 
             qInfo() << "File content scan stage 2: discard unique-size groups";
-            // Discard unique-size groups. A unique file size cannot have a duplicate, so do not perform any file I/O for it.
+            // Discard unique-size groups (1-element lists). A unique file size cannot have a duplicate, so do not perform any file I/O for it.
             if (equalSizeFiles.size() < 2)
             {
                 continue;
@@ -54,6 +54,8 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
 
             QHash<QByteArray, QList<FileRecord>> filesByHash;
 
+            // hash candidate files and group the files by hash
+            qInfo() << "File content scan stage 3: hash candidate files and group the files by hash";
             for (const FileRecord& file: equalSizeFiles)
             {
                 if (stopToken.stop_requested())
@@ -61,11 +63,9 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
                     break;
                 }
 
-                qInfo() << "File content scan stage 3: hash candidate files and group the files by hash";
-                // hash candidate files and group the files by hash
-                const std::optional<QByteArray> hash = fileHasher_(file, stopToken);
+                const std::optional<QByteArray> fileHashValue = fileHasher_(file, stopToken);
 
-                if (!hash.has_value())
+                if (!fileHashValue.has_value())
                 {
                     if (!stopToken.stop_requested())
                     {
@@ -76,7 +76,7 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
                     break;
                 }
 
-                filesByHash[*hash].append(file);
+                filesByHash[*fileHashValue].append(file);
             }
 
             if (stopToken.stop_requested() || fileAccessFailed)
@@ -84,7 +84,30 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
                 break;
             }
 
-            // TODO add verification
+            for (auto hashIterator = filesByHash.cbegin(); hashIterator != filesByHash.cend(); ++hashIterator)
+            {
+                qInfo() << "File content scan stage 4: discard unique hash groups";
+                // discard unique hash groups
+                if (hashIterator.value().size() < 2)
+                {
+                    continue;
+                }
+
+                const QList<FileRecord>& filesWithMatchingHash = hashIterator.value();
+
+                // assume files with matching hash are always identical
+                // TODO what in case of very unlikely cryptographic hash collision?
+                // TODO add byte-by-byte file comparison
+
+                DuplicateGroup duplicateGroup;
+
+                for (const FileRecord& file: filesWithMatchingHash)
+                {
+                    duplicateGroup.addFile(file);
+                }
+
+                duplicateGroups.append(duplicateGroup);
+            }
         }
 
         if (stopToken.stop_requested())
