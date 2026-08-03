@@ -11,13 +11,15 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
     ScanOutcome outcome = ScanOutcome::Failed;
     QHash<qint64, QList<FileRecord>> filesBySize;
 
-    qInfo() << "File content scan stage 1 started: collecting files and grouping them by size";
+    qInfo() << "Started scan based on file content";
+
+    // Stage 1: Collecting files and grouping them by size
     const FileCollectionResult collectionResult = FileCollector::collectRecursively(
         rootDirectoryPath,
         stopToken,
         [&filesBySize](FileRecord file)
         {
-            // collect files and group them by size
+            // visitor collecting files and grouping them by size
             filesBySize[file.getSizeBytes()].append(std::move(file));
         });
 
@@ -42,17 +44,15 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
 
             const QList<FileRecord>& equalSizeFiles = sizeIterator.value();
 
-            qInfo() << "File content scan stage 2: discard unique-size groups";
-            // Discard unique-size groups (1-element lists). A unique file size cannot have a duplicate, so do not perform any file I/O for it.
+            // Stage 2: Discard unique-size groups (1-element lists). A unique file size cannot have a duplicate, so do not perform any file I/O for it.
             if (equalSizeFiles.size() < 2)
             {
                 continue;
             }
 
+            // Stage 3 hash candidate files and group the files by hash
             QHash<QByteArray, QList<FileRecord>> filesByHash;
 
-            // hash candidate files and group the files by hash
-            qInfo() << "File content scan stage 3: hash candidate files and group the files by hash";
             for (const FileRecord& file: equalSizeFiles)
             {
                 if (stopToken.stop_requested())
@@ -83,8 +83,7 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
 
             for (auto hashIterator = filesByHash.cbegin(); hashIterator != filesByHash.cend(); ++hashIterator)
             {
-                qInfo() << "File content scan stage 4: discard unique hash groups";
-                // discard unique hash groups
+                // Stage 4: Discard unique hash groups
                 if (hashIterator.value().size() < 2)
                 {
                     continue;
@@ -96,6 +95,7 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
                 // TODO what in case of very unlikely cryptographic hash collision?
                 // TODO add byte-by-byte file comparison
 
+                // Stage 5: Finalize duplicate groups
                 DuplicateGroup duplicateGroup;
 
                 for (const FileRecord& file: filesWithMatchingHash)

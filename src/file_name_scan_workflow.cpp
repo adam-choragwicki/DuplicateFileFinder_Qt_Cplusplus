@@ -13,13 +13,15 @@ ScanResult FileNameScanWorkflow::execute(const QString& rootDirectoryPath, const
     ScanOutcome outcome = ScanOutcome::Failed;
     QHash<QString, QList<FileRecord>> filesByName;
 
-    qInfo() << "File name scan stage 1 started: collecting files and grouping them by name";
+    qInfo() << "Started scan based on file name";
+
+    // Stage 1: Collecting files and grouping them by name
     const FileCollectionResult fileCollectionResult = FileCollector::collectRecursively(
         rootDirectoryPath,
         stopToken,
         [&filesByName](FileRecord file)
         {
-            // collect files and group them by name
+            // visitor collecting files and grouping them by name
             const QString fileName = file.getFileName();
             filesByName[fileName].append(std::move(file));
         });
@@ -34,8 +36,7 @@ ScanResult FileNameScanWorkflow::execute(const QString& rootDirectoryPath, const
     }
     else
     {
-        qInfo() << "File name scan stage 2 started: grouping files with duplicate names";
-
+        // Stage 2: Grouping files with duplicate names
         for (auto iterator = filesByName.cbegin(); iterator != filesByName.cend(); ++iterator)
         {
             if (stopToken.stop_requested())
