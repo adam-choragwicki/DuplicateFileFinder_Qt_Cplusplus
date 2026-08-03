@@ -5,7 +5,6 @@
 #include <QFutureWatcher>
 #include <QString>
 #include <QTimer>
-
 #include <stop_token>
 
 class ScanRequest;
@@ -30,8 +29,6 @@ signals:
     void scanCancelled();
 
 private:
-    static void logScanSummary(const ScanSummary& summary);
-
     static constexpr int scanDurationMilliseconds_ = 750;
 
     QTimer progressTimer_;

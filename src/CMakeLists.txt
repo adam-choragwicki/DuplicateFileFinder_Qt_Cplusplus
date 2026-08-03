@@ -14,7 +14,14 @@ qt_add_executable(${PROJECT_NAME}
         file_content_scan_workflow.h file_content_scan_workflow.cpp
         file_collector.cpp file_collector.h
         file_hasher.h
+
+        scan_summary/scan_summary.h
+        scan_summary/scan_summary_logger.h
+        scan_summary/file_name_scan_summary.h
+        scan_summary/file_content_scan_summary.h
 )
+
+target_include_directories(${PROJECT_NAME} PRIVATE .)
 
 target_link_libraries(${PROJECT_NAME}
         PRIVATE

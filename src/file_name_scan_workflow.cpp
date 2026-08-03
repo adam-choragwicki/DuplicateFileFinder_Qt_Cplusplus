@@ -1,5 +1,5 @@
 #include "file_name_scan_workflow.h"
-
+#include "scan_summary/file_name_scan_summary.h"
 #include <QDateTime>
 #include <QDebug>
 #include <QElapsedTimer>
@@ -67,7 +67,8 @@ ScanResult FileNameScanWorkflow::execute(const QString& rootDirectoryPath, const
     }
 
     const DuplicateGroupMetrics duplicateMetrics = calculateDuplicateGroupMetrics(duplicateGroups);
-    ScanSummary summary{
+
+    FileNameScanSummary summary{
         QDateTime::currentDateTimeUtc(),
         std::chrono::milliseconds(durationTimer.elapsed()),
         fileCollectionResult.getMetrics().getScannedDirectoriesCount(),

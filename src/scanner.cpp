@@ -1,14 +1,14 @@
 #include "scanner.h"
 #include "scan_request.h"
+#include "file_name_scan_workflow.h"
+#include "file_content_scan_workflow.h"
+#include "scan_summary/scan_summary_logger.h"
 
 #include <QDebug>
 #include <QDir>
 #include <QDirIterator>
 #include <QThread>
 #include <QtConcurrentRun>
-
-#include "file_name_scan_workflow.h"
-#include "file_content_scan_workflow.h"
 
 Scanner::Scanner(QObject* parent) : QObject(parent)
 {
@@ -37,7 +37,7 @@ Scanner::Scanner(QObject* parent) : QObject(parent)
         if (scanResult.getOutcome() == ScanOutcome::Cancelled)
         {
             qInfo() << "Scan operation cancelled";
-            logScanSummary(scanResult.getScanSummary());
+            ScanSummaryLogger::log(scanResult);
             emit scanCancelled();
             return;
         }
@@ -53,7 +53,7 @@ Scanner::Scanner(QObject* parent) : QObject(parent)
             qInfo() << "Scan operation complete:" << scanResult.getDuplicateGroups().size() << "duplicate groups found";
         }
 
-        logScanSummary(scanResult.getScanSummary());
+        ScanSummaryLogger::log(scanResult);
         emit scanComplete(scanResult);
     });
 }
@@ -140,17 +140,4 @@ void Scanner::cancelScan()
     }
 
     stopSource_.request_stop();
-}
-
-void Scanner::logScanSummary(const ScanSummary& summary)
-{
-    qInfo() << "Scan summary:";
-    qInfo().noquote() << "  Completed at:" << summary.getCompletedAt().toLocalTime().toString("yyyy-MM-dd hh:mm:ss");
-    qInfo() << "  Duration (ms):" << summary.getDuration().count();
-    qInfo() << "  Scanned directories:" << summary.getScannedDirectoriesCount();
-    qInfo() << "  Scanned files:" << summary.getScannedFilesCount();
-    qInfo() << "  Total scanned bytes:" << summary.getTotalScannedBytes();
-    qInfo() << "  Duplicate groups:" << summary.getDuplicateGroupsCount();
-    qInfo() << "  Files in duplicate groups:" << summary.getTotalFilesInDuplicateGroupsCount();
-    qInfo() << "  Bytes occupied by files in duplicate groups:" << summary.getTotalBytesOccupiedByFilesInDuplicateGroups();
 }

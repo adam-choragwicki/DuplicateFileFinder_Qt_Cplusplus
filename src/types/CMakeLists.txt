@@ -3,7 +3,6 @@ add_library(types
         file_record.h
         duplicate_group.h
         scan_outcome.h
-        scan_summary.h
         scan_result.h)
 
 target_link_libraries(types

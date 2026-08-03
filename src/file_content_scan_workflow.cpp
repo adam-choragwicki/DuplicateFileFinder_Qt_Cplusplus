@@ -1,5 +1,6 @@
 #include "file_content_scan_workflow.h"
 #include "file_hasher.h"
+#include "scan_summary/file_content_scan_summary.h"
 #include <QElapsedTimer>
 
 ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, const std::stop_token& stopToken) const
@@ -122,7 +123,8 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
     }
 
     const DuplicateGroupMetrics duplicateMetrics = calculateDuplicateGroupMetrics(duplicateGroups);
-    ScanSummary summary{
+
+    FileContentScanSummary summary{
         QDateTime::currentDateTimeUtc(),
         std::chrono::milliseconds(durationTimer.elapsed()),
         collectionResult.getMetrics().getScannedDirectoriesCount(),
@@ -130,8 +132,30 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
         collectionResult.getMetrics().getTotalScannedBytes(),
         static_cast<quint64>(duplicateGroups.size()),
         duplicateMetrics.getFilesCount(),
-        duplicateMetrics.getTotalBytes()
+        duplicateMetrics.getTotalBytes(),
+        calculatePotentiallyRecoverableBytes(duplicateGroups)
     };
 
     return ScanResult(std::move(duplicateGroups), outcome, std::move(summary));
+}
+
+quint64 FileContentScanWorkflow::calculatePotentiallyRecoverableBytes(const QList<DuplicateGroup>& duplicateGroups)
+{
+    quint64 recoverableBytes = 0;
+
+    for (const DuplicateGroup& duplicateGroup: duplicateGroups)
+    {
+        const QList<FileRecord>& files = duplicateGroup.getFiles();
+
+        // Keep one file from every exact-content group; every additional file is potentially recoverable.
+        for (qsizetype fileIndex = 1; fileIndex < files.size(); ++fileIndex)
+        {
+            if (files.at(fileIndex).getSizeBytes() > 0)
+            {
+                recoverableBytes += static_cast<quint64>(files.at(fileIndex).getSizeBytes());
+            }
+        }
+    }
+
+    return recoverableBytes;
 }

@@ -1,22 +1,31 @@
 #pragma once
 
 #include "duplicate_group.h"
+#include "scan_summary/file_name_scan_summary.h"
+#include "scan_summary/file_content_scan_summary.h"
 #include "scan_outcome.h"
-#include "scan_summary.h"
 
 #include <QList>
+
+using ScanSummaryDetails = std::variant<FileNameScanSummary, FileContentScanSummary>;
 
 class ScanResult
 {
 public:
-    ScanResult(QList<DuplicateGroup> duplicateGroups, const ScanOutcome outcome, ScanSummary scanSummary)
+    ScanResult(QList<DuplicateGroup> duplicateGroups, const ScanOutcome outcome, FileNameScanSummary scanSummary)
         : duplicateGroups_(std::move(duplicateGroups)),
-          scanSummary_(std::move(scanSummary)),
+          scanSummaryDetails_(std::move(scanSummary)),
+          outcome_(outcome)
+    {}
+
+    ScanResult(QList<DuplicateGroup> duplicateGroups, const ScanOutcome outcome, FileContentScanSummary scanSummary)
+        : duplicateGroups_(std::move(duplicateGroups)),
+          scanSummaryDetails_(std::move(scanSummary)),
           outcome_(outcome)
     {}
 
     [[nodiscard]] const QList<DuplicateGroup>& getDuplicateGroups() const { return duplicateGroups_; }
-    [[nodiscard]] const ScanSummary& getScanSummary() const { return scanSummary_; }
+    [[nodiscard]] const ScanSummaryDetails& getScanSummaryDetails() const { return scanSummaryDetails_; }
     [[nodiscard]] ScanOutcome getOutcome() const { return outcome_; }
     [[nodiscard]] bool isScanCancelled() const { return outcome_ == ScanOutcome::Cancelled; }
 
@@ -24,6 +33,6 @@ public:
 
 private:
     QList<DuplicateGroup> duplicateGroups_;
-    ScanSummary scanSummary_;
+    ScanSummaryDetails scanSummaryDetails_;
     ScanOutcome outcome_;
 };
