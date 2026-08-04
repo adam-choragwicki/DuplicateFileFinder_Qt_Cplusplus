@@ -154,7 +154,7 @@
           </column>
           <column>
            <property name="text">
-            <string>Folders</string>
+            <string>Directories</string>
            </property>
           </column>
           <column>

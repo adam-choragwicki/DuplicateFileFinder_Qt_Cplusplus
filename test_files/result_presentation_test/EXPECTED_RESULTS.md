@@ -17,5 +17,5 @@ containing 59 duplicate files in total.
 | `common_payload.dat` | 10 |
 
 Every copy within a filename group also has identical content. Content is unique between groups,
-so the same group sizes are expected for both filename and content scans. Folder paths deliberately
+so the same group sizes are expected for both filename and content scans. Directory paths deliberately
 include short, long, deeply nested, and space-containing variants.

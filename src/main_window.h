@@ -2,9 +2,6 @@
 
 #include "types/scan_type.h"
 #include "types/scan_result.h"
-#include "types/file_record.h"
-#include <QList>
-#include <QMainWindow>
 #include <ui_main_window.h>
 
 QT_BEGIN_NAMESPACE
@@ -28,6 +25,7 @@ signals:
 public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
+    void initializeResultTabColumns();
 
     [[nodiscard]] ScanType getScanType() const;
     void setDirectoryPathLabel(const QString& directoryPath);
@@ -37,7 +35,11 @@ public:
 private:
     void initializeUI();
     void populateScanTypeComboBox();
+    void initializeResultColumnWidths();
+    void updateResultRowHeights();
+
     [[nodiscard]] QString getInitialDirectoryScanPath() const;
 
     Ui::MainWindow* ui;
+    bool resultColumnWidthsInitialized_{};
 };
