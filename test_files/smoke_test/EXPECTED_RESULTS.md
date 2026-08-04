@@ -1,4 +1,4 @@
-# Scan fixtures
+# Smoke test fixtures
 
 ## By file name
 

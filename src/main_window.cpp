@@ -30,11 +30,7 @@ void MainWindow::initializeUI()
     // Clear placeholder values from combo boxes
     ui->scanType_ComboBox->clear();
 
-    QDir testFilesDirectory{QDir::currentPath()};
-    testFilesDirectory.cdUp();
-    testFilesDirectory.cd("test_files");
-
-    ui->directoryPath_Label->setText(testFilesDirectory.path());
+    ui->directoryPath_Label->setText(getInitialDirectoryScanPath());
 
     ui->results_TableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
@@ -108,4 +104,40 @@ ScanType MainWindow::getScanType() const
     }
 
     return data.value<ScanType>();
+}
+
+QString MainWindow::getInitialDirectoryScanPath() const
+{
+    constexpr enum class TestType
+    {
+        SMOKE_TEST,
+        RESULT_PRESENTATION_TEST,
+        BIG_DIRECTORY_TEST
+    } testType = TestType::SMOKE_TEST; // adjust test type here
+
+    if (testType == TestType::SMOKE_TEST)
+    {
+        QDir smokeTestFilesDirectory{QDir::currentPath()};
+        smokeTestFilesDirectory.cdUp();
+        smokeTestFilesDirectory.cd("test_files");
+        smokeTestFilesDirectory.cd("smoke_test");
+        return smokeTestFilesDirectory.path();
+    }
+
+    if (testType == TestType::RESULT_PRESENTATION_TEST)
+    {
+        QDir resultPresentationTestDirectoryPath{QDir::currentPath()};
+        resultPresentationTestDirectoryPath.cdUp();
+        resultPresentationTestDirectoryPath.cd("test_files");
+        resultPresentationTestDirectoryPath.cd("result_presentation_test");
+        return resultPresentationTestDirectoryPath.path();
+    }
+
+    if (testType == TestType::BIG_DIRECTORY_TEST)
+    {
+        const QDir bigDirectoryPath = QString("C:") + QDir::separator() + QString("FULL_EXTERNAL_DISK");
+        return bigDirectoryPath.path();
+    }
+
+    throw std::runtime_error("Invalid TestType");
 }
