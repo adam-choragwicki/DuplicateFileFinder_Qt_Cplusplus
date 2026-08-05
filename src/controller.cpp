@@ -5,6 +5,7 @@
 #include <QEventLoop>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QProcess>
 #include <QProgressDialog>
 
 #include <limits>
@@ -15,6 +16,7 @@ Controller::Controller(Model& model, MainWindow& view) : model_(model), view_(vi
 
     connect(&view_, &MainWindow::startScanButtonClicked, this, &Controller::onStartScanButtonClicked);
     connect(&view_, &MainWindow::chooseDirectoryButtonClicked, this, &Controller::onChooseDirectoryButtonClicked);
+    connect(&view_, &MainWindow::revealFileInSystemFileManagerRequested, this, &Controller::revealFileInSystemFileManager);
     connect(&scanner_, &Scanner::progressChanged, this, &Controller::onScanProgressChanged);
     connect(&scanner_, &Scanner::scanComplete, this, &Controller::onScanOperationComplete);
     connect(&scanner_, &Scanner::scanCancelled, this, &Controller::onScanOperationCancelled);
@@ -164,4 +166,30 @@ void Controller::closeScanProgressDialog()
     scanProgressDialog_->close();
     scanProgressDialog_->deleteLater();
     scanProgressDialog_ = nullptr;
+}
+
+void Controller::revealFileInSystemFileManager(const QString& absoluteFilePath)
+{
+    const QFileInfo fileInfo(absoluteFilePath);
+    if (!fileInfo.isFile())
+    {
+        qWarning() << "Cannot reveal file because it no longer exists:" << absoluteFilePath;
+        return;
+    }
+
+#if defined(Q_OS_WIN)
+    const bool fileManagerStarted = QProcess::startDetached(QStringLiteral("explorer.exe"), {QStringLiteral("/select,"), QDir::toNativeSeparators(fileInfo.absoluteFilePath())});
+
+    if (!fileManagerStarted)
+    {
+        qWarning() << "Failed to open Windows File Explorer for:" << fileInfo.absoluteFilePath();
+    }
+#elif defined(Q_OS_LINUX) // TODO test on Linux
+    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(fileInfo.absolutePath())))
+    {
+        qWarning() << "Failed to open the containing directory for:" << fileInfo.absoluteFilePath();
+    }
+#else
+    qWarning() << "Revealing files in the system file manager is unsupported on this operating system";
+#endif
 }

@@ -19,6 +19,7 @@ class MainWindow : public QMainWindow
 
 signals:
     void chooseDirectoryButtonClicked();
+    void revealFileInSystemFileManagerRequested(const QString& absoluteFilePath);
     void startScanButtonClicked();
     void quitButtonClicked();
 

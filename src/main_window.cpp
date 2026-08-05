@@ -73,6 +73,19 @@ void MainWindow::initializeResultTabColumns()
     verticalHeader->setSectionResizeMode(QHeaderView::Fixed);
     verticalHeader->setMinimumSectionSize(resultRowHeight);
     verticalHeader->setDefaultSectionSize(resultRowHeight);
+
+    connect(ui->results_TableWidget, &QTableWidget::cellDoubleClicked, this, [this](const int row, const int)
+    {
+        const QTableWidgetItem* fileNameItem = ui->results_TableWidget->item(row, 0);
+
+        if (!fileNameItem)
+        {
+            qWarning() << "Cannot reveal a result file; row" << row << "has no file name item";
+            return;
+        }
+
+        emit revealFileInSystemFileManagerRequested(fileNameItem->data(Qt::UserRole).toString());
+    });
 }
 
 void MainWindow::initializeUI()
@@ -131,7 +144,10 @@ void MainWindow::showScanResult(const ScanResult& scanResult)
             const FileRecord& file = files.at(fileIndex);
             const bool isReferenceFile = fileIndex == 0;
 
-            ui->results_TableWidget->setItem(row, 0, createResultItem(file.getFileName(), tableFont, isReferenceFile));
+            QTableWidgetItem* fileNameItem = createResultItem(file.getFileName(), tableFont, isReferenceFile);
+            fileNameItem->setData(Qt::UserRole, file.getAbsoluteFilePath());
+
+            ui->results_TableWidget->setItem(row, 0, fileNameItem);
             ui->results_TableWidget->setItem(row, 1, createResultItem(file.getDirectoryPath(), tableFont, isReferenceFile));
             ui->results_TableWidget->setItem(row, 2, createResultItem(QString::number(file.getSizeBytes() / 1024.0, 'f', 2), tableFont, isReferenceFile));
 

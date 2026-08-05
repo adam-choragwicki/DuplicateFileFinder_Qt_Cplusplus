@@ -22,6 +22,7 @@ private slots:
 
 private:
     void closeScanProgressDialog();
+    void revealFileInSystemFileManager(const QString& absoluteFilePath);
 
     Model& model_;
     MainWindow& view_;
