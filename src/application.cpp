@@ -1,11 +1,13 @@
 #include "application.h"
-#include <QCoreApplication>
+#include <QApplication>
 #include <QDebug>
-#include <QFile>
+#include <QStyleFactory>
+#include <QStyleHints>
 
 Application::Application()
 {
     printAppInfo();
+    applyLightTheme();
 
     model_ = std::make_unique<Model>();
     view_ = std::make_unique<MainWindow>();
@@ -13,6 +15,15 @@ Application::Application()
     controller_ = std::make_unique<Controller>(*model_, *view_);
 
     view_->show();
+}
+
+void Application::applyLightTheme()
+{
+    // Ask the platform integration to use light colors for elements outside the widget palette as well, such as native window decorations where supported.
+    // This overrides dark theme on Windows
+    // TODO test on Linux
+    QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Light);
+    QApplication::setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
 }
 
 void Application::printAppInfo()

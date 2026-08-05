@@ -13,6 +13,7 @@ public:
 
 private:
     void printAppInfo();
+    void applyLightTheme();
 
     std::unique_ptr<Controller> controller_;
     std::unique_ptr<Model> model_;
