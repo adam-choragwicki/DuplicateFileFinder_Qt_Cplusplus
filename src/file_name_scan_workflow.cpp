@@ -4,6 +4,43 @@
 #include <QDebug>
 #include <QElapsedTimer>
 
+namespace
+{
+    // Set to false to group files by the name before their final extension:
+    // "report.txt" and "report.pdf" will then belong to the same duplicate group.
+    // Set to true to require the complete file name - including its extension - to match.
+    constexpr bool includeFileExtensionInFileNameScan = false;
+
+    [[nodiscard]] QString getFileNameComparisonKey(const QString& fileName)
+    {
+        if constexpr (includeFileExtensionInFileNameScan)
+        {
+            return fileName;
+        }
+
+        const qsizetype extensionSeparatorIndex = fileName.lastIndexOf('.');
+        if (extensionSeparatorIndex < 0)
+        {
+            return fileName;
+        }
+
+        // On Linux a leading dot normally marks a hidden file rather than an extension. Preserve names such as ".bashrc", but still remove the final extension from ".config.json".
+        qsizetype firstNonDotCharacterIndex = 0;
+        while (firstNonDotCharacterIndex < fileName.size() && fileName.at(firstNonDotCharacterIndex) == '.')
+        {
+            ++firstNonDotCharacterIndex;
+        }
+
+        if (extensionSeparatorIndex < firstNonDotCharacterIndex)
+        {
+            return fileName;
+        }
+
+        // Only the suffix after the final dot is treated as the extension. For example, "archive.tar.gz" produces the comparison key "archive.tar".
+        return fileName.left(extensionSeparatorIndex);
+    }
+}
+
 ScanResult FileNameScanWorkflow::execute(const QString& rootDirectoryPath, const std::stop_token& stopToken, const ScanProgressCallback& scanProgressCallback) const
 {
     QElapsedTimer durationTimer;
@@ -14,7 +51,7 @@ ScanResult FileNameScanWorkflow::execute(const QString& rootDirectoryPath, const
     QHash<QString, QList<FileRecord>> filesByName;
     quint64 enumeratedFilesCount = 0;
 
-    qInfo() << "Started scan based on file name";
+    qInfo() << "Started scan based on file name; include file extension in comparison =" << includeFileExtensionInFileNameScan;
 
     scanProgressCallback({.phase = ScanPhase::EnumeratingFiles, .processedFilesCount = 0, .totalFilesCount = std::nullopt});
 
@@ -25,8 +62,8 @@ ScanResult FileNameScanWorkflow::execute(const QString& rootDirectoryPath, const
         [&filesByName, &enumeratedFilesCount, &scanProgressCallback](FileRecord file)
         {
             // visitor collecting files and grouping them by name
-            const QString fileName = file.getFileName();
-            filesByName[fileName].append(std::move(file));
+            const QString fileNameComparisonKey = getFileNameComparisonKey(file.getFileName());
+            filesByName[fileNameComparisonKey].append(std::move(file));
             ++enumeratedFilesCount;
 
             scanProgressCallback({.phase = ScanPhase::EnumeratingFiles, .processedFilesCount = enumeratedFilesCount, .totalFilesCount = std::nullopt});
