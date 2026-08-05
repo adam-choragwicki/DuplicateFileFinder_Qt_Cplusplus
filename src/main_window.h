@@ -19,6 +19,7 @@ class MainWindow : public QMainWindow
 
 signals:
     void chooseDirectoryButtonClicked();
+    void exportToHtmlRequested();
     void revealFileInSystemFileManagerRequested(const QString& absoluteFilePath);
     void startScanButtonClicked();
     void quitButtonClicked();
@@ -32,6 +33,7 @@ public:
     void setDirectoryPathLabel(const QString& directoryPath);
     void showScanResult(const ScanResult& scanResult);
     [[nodiscard]] QString getDirectoryPath() const { return ui->directoryPath_Label->text(); }
+    [[nodiscard]] const QList<DuplicateGroup>& getDisplayedDuplicateGroups() const { return resultDuplicateGroups_; }
 
 private:
     void initializeUI();

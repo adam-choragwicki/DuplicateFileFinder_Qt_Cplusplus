@@ -1,4 +1,5 @@
 #include "controller.h"
+#include "html_result_exporter.h"
 #include "scan_request.h"
 
 #include <QCoreApplication>
@@ -16,10 +17,44 @@ Controller::Controller(Model& model, MainWindow& view) : model_(model), view_(vi
 
     connect(&view_, &MainWindow::startScanButtonClicked, this, &Controller::onStartScanButtonClicked);
     connect(&view_, &MainWindow::chooseDirectoryButtonClicked, this, &Controller::onChooseDirectoryButtonClicked);
+    connect(&view_, &MainWindow::exportToHtmlRequested, this, &Controller::onExportToHtmlRequested);
     connect(&view_, &MainWindow::revealFileInSystemFileManagerRequested, this, &Controller::revealFileInSystemFileManager);
     connect(&scanner_, &Scanner::progressChanged, this, &Controller::onScanProgressChanged);
     connect(&scanner_, &Scanner::scanComplete, this, &Controller::onScanOperationComplete);
     connect(&scanner_, &Scanner::scanCancelled, this, &Controller::onScanOperationCancelled);
+}
+
+void Controller::onExportToHtmlRequested()
+{
+    const QList<DuplicateGroup>& duplicateGroups = view_.getDisplayedDuplicateGroups();
+
+    if (duplicateGroups.isEmpty())
+    {
+        QMessageBox::warning(&view_, "Export failed", "There are no scan results to export.");
+        return;
+    }
+
+    const QString outputFilePath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("duplicate_file_finder_results.html"));
+    QString errorMessage;
+
+    if (!HtmlResultExporter::exportToFile(duplicateGroups, outputFilePath, errorMessage))
+    {
+        qCritical() << "Failed to export scan results to" << outputFilePath << ':' << errorMessage;
+
+        QMessageBox::critical(
+            &view_,
+            "Export failed",
+            QStringLiteral("The HTML report could not be saved.\n\n%1").arg(errorMessage));
+
+        return;
+    }
+
+    qInfo() << "Exported scan results to" << outputFilePath;
+
+    QMessageBox::information(
+        &view_,
+        "Export complete",
+        QStringLiteral("The HTML report was saved to:\n\n%1").arg(QDir::toNativeSeparators(outputFilePath)));
 }
 
 void Controller::onStartScanButtonClicked()

@@ -77,6 +77,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
     initializeUI();
 
     connect(ui->chooseDirectory_PushButton, &QPushButton::clicked, this, &MainWindow::chooseDirectoryButtonClicked);
+    connect(ui->exportToHtml_Action, &QAction::triggered, this, &MainWindow::exportToHtmlRequested);
     connect(ui->startScan_PushButton, &QPushButton::clicked, this, &MainWindow::startScanButtonClicked);
 }
 
@@ -176,6 +177,7 @@ void MainWindow::showScanResult(const ScanResult& scanResult)
 
     sortResultGroups(resultSortColumn_, resultSortOrder_);
 
+    ui->exportToHtml_Action->setEnabled(true);
     ui->main_TabWidget->setCurrentWidget(ui->resultsTab);
 
     if (!resultColumnWidthsInitialized_)

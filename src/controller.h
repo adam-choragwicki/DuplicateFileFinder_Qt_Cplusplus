@@ -14,6 +14,7 @@ public:
     Controller(Model& model, MainWindow& view);
 
 private slots:
+    void onExportToHtmlRequested();
     void onStartScanButtonClicked();
     void onChooseDirectoryButtonClicked();
     void onScanProgressChanged(const ScanProgress& progress);

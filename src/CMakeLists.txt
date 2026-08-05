@@ -15,6 +15,7 @@ qt_add_executable(${PROJECT_NAME}
         file_content_scan_workflow.h file_content_scan_workflow.cpp
         file_collector.cpp file_collector.h
         file_hasher.h
+        html_result_exporter.cpp html_result_exporter.h
 
         scan_summary/scan_summary.h
         scan_summary/scan_summary_logger.h
