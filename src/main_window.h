@@ -36,7 +36,6 @@ private:
     void initializeUI();
     void populateScanTypeComboBox();
     void initializeResultColumnWidths();
-    void updateResultRowHeights();
 
     [[nodiscard]] QString getInitialDirectoryScanPath() const;
 

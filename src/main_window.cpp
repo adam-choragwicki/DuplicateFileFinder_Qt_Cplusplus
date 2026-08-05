@@ -4,7 +4,9 @@
 
 #include <QComboBox>
 #include <QCloseEvent>
+#include <QColor>
 #include <QDir>
+#include <QFont>
 #include <QFontMetrics>
 #include <QHeaderView>
 #include <QTableWidgetItem>
@@ -12,7 +14,26 @@
 
 namespace
 {
-    constexpr int cellVerticalPadding = 20;
+    constexpr int resultRowVerticalPadding = 4;
+
+    const QColor referenceRowBackgroundColor{0xC0, 0xC0, 0xC0};
+    const QColor referenceRowTextColor{0x20, 0x32, 0xE8};
+    const QColor duplicateRowBackgroundColor{0xFF, 0xFF, 0xFF};
+    const QColor duplicateRowTextColor{0x00, 0x00, 0x00};
+
+    QTableWidgetItem* createResultItem(const QString& text, const QFont& tableFont, const bool isReferenceFile)
+    {
+        auto* item = new QTableWidgetItem(text);
+        item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        item->setBackground(isReferenceFile ? referenceRowBackgroundColor : duplicateRowBackgroundColor);
+        item->setForeground(isReferenceFile ? referenceRowTextColor : duplicateRowTextColor);
+
+        QFont itemFont = tableFont;
+        itemFont.setBold(isReferenceFile);
+        item->setFont(itemFont);
+
+        return item;
+    }
 }
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWindow)
@@ -36,6 +57,7 @@ void MainWindow::initializeResultTabColumns()
 {
     ui->results_TableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
     ui->results_TableWidget->setWordWrap(false);
+    ui->results_TableWidget->setSortingEnabled(false);
 
     // All sections must be Interactive so both separators expose a drag handle; a Stretch section
     // cannot be resized by the user. Initial proportional widths are assigned once the Results tab
@@ -45,12 +67,12 @@ void MainWindow::initializeResultTabColumns()
     horizontalHeader->setSectionResizeMode(1, QHeaderView::Interactive);
     horizontalHeader->setSectionResizeMode(2, QHeaderView::Interactive);
 
-    // Sorting moves groups to different row indexes. Reapply their stored line-count heights after
-    // the table has finished sorting so every group remains fully visible without auto-sizing.
-    connect(horizontalHeader, &QHeaderView::sortIndicatorChanged, this, [this]
-    {
-        QTimer::singleShot(0, this, &MainWindow::updateResultRowHeights);
-    });
+    // Each file occupies one row, so all rows can use one compact fixed height.
+    QHeaderView* verticalHeader = ui->results_TableWidget->verticalHeader();
+    const int resultRowHeight = QFontMetrics(ui->results_TableWidget->font()).height() + resultRowVerticalPadding;
+    verticalHeader->setSectionResizeMode(QHeaderView::Fixed);
+    verticalHeader->setMinimumSectionSize(resultRowHeight);
+    verticalHeader->setDefaultSectionSize(resultRowHeight);
 }
 
 void MainWindow::initializeUI()
@@ -85,39 +107,38 @@ void MainWindow::setDirectoryPathLabel(const QString& directoryPath)
 
 void MainWindow::showScanResult(const ScanResult& scanResult)
 {
+    ui->results_TableWidget->setUpdatesEnabled(false);
     ui->results_TableWidget->setSortingEnabled(false);
     ui->results_TableWidget->clearContents();
-    ui->results_TableWidget->setRowCount(scanResult.getDuplicateGroups().size());
 
-    for (qsizetype row = 0; row < scanResult.getDuplicateGroups().size(); ++row)
+    qsizetype filesInDuplicateGroupsCount = 0;
+    for (const DuplicateGroup& duplicateGroup: scanResult.getDuplicateGroups())
     {
-        const DuplicateGroup& duplicateGroup = scanResult.getDuplicateGroups().at(row);
-        const QList<FileRecord>& files = duplicateGroup.getFiles();
-        QStringList directories;
-        QStringList sizes;
-
-        for (const FileRecord& file: files)
-        {
-            directories.append(file.getDirectoryPath());
-            sizes.append(QString::number(file.getSizeBytes() / 1024.0, 'f', 2));
-        }
-
-        auto* fileNameItem = new QTableWidgetItem(files.constFirst().getFileName());
-        auto* directoriesItem = new QTableWidgetItem(directories.join('\n'));
-        auto* sizesItem = new QTableWidgetItem(sizes.join('\n'));
-
-        fileNameItem->setTextAlignment(Qt::AlignLeft);
-        directoriesItem->setTextAlignment(Qt::AlignLeft);
-        sizesItem->setTextAlignment(Qt::AlignLeft);
-        directoriesItem->setData(Qt::UserRole, files.size());
-
-        ui->results_TableWidget->setItem(static_cast<int>(row), 0, fileNameItem);
-        ui->results_TableWidget->setItem(static_cast<int>(row), 1, directoriesItem);
-        ui->results_TableWidget->setItem(static_cast<int>(row), 2, sizesItem);
+        filesInDuplicateGroupsCount += duplicateGroup.getFiles().size();
     }
 
-    ui->results_TableWidget->setSortingEnabled(true);
-    updateResultRowHeights();
+    ui->results_TableWidget->setRowCount(static_cast<int>(filesInDuplicateGroupsCount));
+
+    int row = 0;
+    const QFont tableFont = ui->results_TableWidget->font();
+
+    for (const DuplicateGroup& duplicateGroup: scanResult.getDuplicateGroups())
+    {
+        const QList<FileRecord>& files = duplicateGroup.getFiles();
+
+        for (qsizetype fileIndex = 0; fileIndex < files.size(); ++fileIndex)
+        {
+            const FileRecord& file = files.at(fileIndex);
+            const bool isReferenceFile = fileIndex == 0;
+
+            ui->results_TableWidget->setItem(row, 0, createResultItem(file.getFileName(), tableFont, isReferenceFile));
+            ui->results_TableWidget->setItem(row, 1, createResultItem(file.getDirectoryPath(), tableFont, isReferenceFile));
+            ui->results_TableWidget->setItem(row, 2, createResultItem(QString::number(file.getSizeBytes() / 1024.0, 'f', 2), tableFont, isReferenceFile));
+
+            ++row;
+        }
+    }
+
     ui->results_TableWidget->setUpdatesEnabled(true);
     ui->main_TabWidget->setCurrentWidget(ui->resultsTab);
 
@@ -162,18 +183,6 @@ void MainWindow::initializeResultColumnWidths()
     ui->results_TableWidget->setColumnWidth(1, directoriesColumnWidth);
     ui->results_TableWidget->setColumnWidth(2, sizesColumnWidth);
     resultColumnWidthsInitialized_ = true;
-}
-
-void MainWindow::updateResultRowHeights()
-{
-    const int lineHeight = QFontMetrics(ui->results_TableWidget->font()).lineSpacing();
-
-    for (int row = 0; row < ui->results_TableWidget->rowCount(); ++row)
-    {
-        const QTableWidgetItem* directoriesItem = ui->results_TableWidget->item(row, 1);
-        const int lineCount = directoriesItem ? qMax(directoriesItem->data(Qt::UserRole).toInt(), 1) : 1;
-        ui->results_TableWidget->setRowHeight(row, lineCount * lineHeight + cellVerticalPadding);
-    }
 }
 
 ScanType MainWindow::getScanType() const
