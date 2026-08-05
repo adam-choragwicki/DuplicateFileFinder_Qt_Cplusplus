@@ -11,10 +11,16 @@
 #include <QHeaderView>
 #include <QTableWidgetItem>
 #include <QTimer>
+#include <QCollator>
+
+// TODO move result handling specific code to separate class
 
 namespace
 {
     constexpr int resultRowVerticalPadding = 4;
+    constexpr int fileNameColumn = 0;
+    constexpr int directoriesColumn = 1;
+    constexpr int sizesColumn = 2;
 
     const QColor referenceRowBackgroundColor{0xC0, 0xC0, 0xC0};
     const QColor referenceRowTextColor{0x20, 0x32, 0xE8};
@@ -33,6 +39,32 @@ namespace
         item->setFont(itemFont);
 
         return item;
+    }
+
+    int compareReferenceFiles(const FileRecord& leftFile, const FileRecord& rightFile, const int column, const QCollator& collator)
+    {
+        switch (column)
+        {
+            case fileNameColumn:
+                return collator.compare(leftFile.getFileName(), rightFile.getFileName());
+
+            case directoriesColumn:
+                return collator.compare(leftFile.getDirectoryPath(), rightFile.getDirectoryPath());
+
+            case sizesColumn:
+                if (leftFile.getSizeBytes() < rightFile.getSizeBytes())
+                {
+                    return -1;
+                }
+                if (leftFile.getSizeBytes() > rightFile.getSizeBytes())
+                {
+                    return 1;
+                }
+                return 0;
+
+            default:
+                qFatal("Cannot sort results by unknown column %d", column);
+        }
     }
 }
 
@@ -57,6 +89,8 @@ void MainWindow::initializeResultTabColumns()
 {
     ui->results_TableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
     ui->results_TableWidget->setWordWrap(false);
+
+    // Disable QTableWidget's built-in sorting because it moves rows independently, which would separate duplicate rows from their reference.
     ui->results_TableWidget->setSortingEnabled(false);
 
     // All sections must be Interactive so both separators expose a drag handle; a Stretch section
@@ -66,6 +100,21 @@ void MainWindow::initializeResultTabColumns()
     horizontalHeader->setSectionResizeMode(0, QHeaderView::Interactive);
     horizontalHeader->setSectionResizeMode(1, QHeaderView::Interactive);
     horizontalHeader->setSectionResizeMode(2, QHeaderView::Interactive);
+    horizontalHeader->setSectionsClickable(true);
+    horizontalHeader->setSortIndicatorShown(true);
+    horizontalHeader->setSortIndicatorClearable(false);
+    horizontalHeader->setSortIndicator(fileNameColumn, Qt::AscendingOrder);
+
+    // group-aware sorting when column header is clicked
+    connect(horizontalHeader, &QHeaderView::sectionClicked, this, [this, horizontalHeader](const int column)
+    {
+        const Qt::SortOrder sortOrder = column == resultSortColumn_
+                                            ? (resultSortOrder_ == Qt::AscendingOrder ? Qt::DescendingOrder : Qt::AscendingOrder)
+                                            : Qt::AscendingOrder;
+
+        horizontalHeader->setSortIndicator(column, sortOrder);
+        sortResultGroups(column, sortOrder);
+    });
 
     // Each file occupies one row, so all rows can use one compact fixed height.
     QHeaderView* verticalHeader = ui->results_TableWidget->verticalHeader();
@@ -120,12 +169,52 @@ void MainWindow::setDirectoryPathLabel(const QString& directoryPath)
 
 void MainWindow::showScanResult(const ScanResult& scanResult)
 {
+    resultDuplicateGroups_ = scanResult.getDuplicateGroups();
+    resultSortColumn_ = fileNameColumn;
+    resultSortOrder_ = Qt::AscendingOrder;
+    ui->results_TableWidget->horizontalHeader()->setSortIndicator(resultSortColumn_, resultSortOrder_);
+
+    sortResultGroups(resultSortColumn_, resultSortOrder_);
+
+    ui->main_TabWidget->setCurrentWidget(ui->resultsTab);
+
+    if (!resultColumnWidthsInitialized_)
+    {
+        // Wait until the tab switch and scrollbar layout have established the usable viewport
+        // width. This runs only once, so later scans do not overwrite user-adjusted widths.
+        QTimer::singleShot(0, this, &MainWindow::initializeResultColumnWidths);
+    }
+}
+
+void MainWindow::sortResultGroups(const int column, const Qt::SortOrder sortOrder)
+{
+    QCollator collator;
+    collator.setCaseSensitivity(Qt::CaseInsensitive);
+    collator.setNumericMode(true);
+
+    std::ranges::stable_sort(resultDuplicateGroups_, [column, sortOrder, &collator](const DuplicateGroup& leftGroup, const DuplicateGroup& rightGroup)
+    {
+        const int comparison = compareReferenceFiles(
+            leftGroup.getFiles().constFirst(),
+            rightGroup.getFiles().constFirst(),
+            column,
+            collator);
+
+        return sortOrder == Qt::AscendingOrder ? comparison < 0 : comparison > 0;
+    });
+
+    resultSortColumn_ = column;
+    resultSortOrder_ = sortOrder;
+    populateResultTable();
+}
+
+void MainWindow::populateResultTable()
+{
     ui->results_TableWidget->setUpdatesEnabled(false);
-    ui->results_TableWidget->setSortingEnabled(false);
     ui->results_TableWidget->clearContents();
 
     qsizetype filesInDuplicateGroupsCount = 0;
-    for (const DuplicateGroup& duplicateGroup: scanResult.getDuplicateGroups())
+    for (const DuplicateGroup& duplicateGroup: resultDuplicateGroups_)
     {
         filesInDuplicateGroupsCount += duplicateGroup.getFiles().size();
     }
@@ -135,8 +224,9 @@ void MainWindow::showScanResult(const ScanResult& scanResult)
     int row = 0;
     const QFont tableFont = ui->results_TableWidget->font();
 
-    for (const DuplicateGroup& duplicateGroup: scanResult.getDuplicateGroups())
+    for (qsizetype groupIndex = 0; groupIndex < resultDuplicateGroups_.size(); ++groupIndex)
     {
+        const DuplicateGroup& duplicateGroup = resultDuplicateGroups_.at(groupIndex);
         const QList<FileRecord>& files = duplicateGroup.getFiles();
 
         for (qsizetype fileIndex = 0; fileIndex < files.size(); ++fileIndex)
@@ -147,23 +237,19 @@ void MainWindow::showScanResult(const ScanResult& scanResult)
             QTableWidgetItem* fileNameItem = createResultItem(file.getFileName(), tableFont, isReferenceFile);
             fileNameItem->setData(Qt::UserRole, file.getAbsoluteFilePath());
 
-            ui->results_TableWidget->setItem(row, 0, fileNameItem);
-            ui->results_TableWidget->setItem(row, 1, createResultItem(file.getDirectoryPath(), tableFont, isReferenceFile));
-            ui->results_TableWidget->setItem(row, 2, createResultItem(QString::number(file.getSizeBytes() / 1024.0, 'f', 2), tableFont, isReferenceFile));
+            auto* rowNumberItem = new QTableWidgetItem(isReferenceFile ? QString::number(groupIndex + 1) : QString{});
+            rowNumberItem->setTextAlignment(Qt::AlignCenter);
+
+            ui->results_TableWidget->setVerticalHeaderItem(row, rowNumberItem);
+            ui->results_TableWidget->setItem(row, fileNameColumn, fileNameItem);
+            ui->results_TableWidget->setItem(row, directoriesColumn, createResultItem(file.getDirectoryPath(), tableFont, isReferenceFile));
+            ui->results_TableWidget->setItem(row, sizesColumn, createResultItem(QString::number(file.getSizeBytes() / 1024.0, 'f', 2), tableFont, isReferenceFile));
 
             ++row;
         }
     }
 
     ui->results_TableWidget->setUpdatesEnabled(true);
-    ui->main_TabWidget->setCurrentWidget(ui->resultsTab);
-
-    if (!resultColumnWidthsInitialized_)
-    {
-        // Wait until the tab switch and scrollbar layout have established the usable viewport
-        // width. This runs only once, so later scans do not overwrite user-adjusted widths.
-        QTimer::singleShot(0, this, &MainWindow::initializeResultColumnWidths);
-    }
 }
 
 void MainWindow::initializeResultColumnWidths()
@@ -195,9 +281,9 @@ void MainWindow::initializeResultColumnWidths()
     // Give the directories column any pixels left by integer division so the columns exactly fill the viewport.
     const int directoriesColumnWidth = widthAvailableForColumns - fileNameColumnWidth - sizesColumnWidth;
 
-    ui->results_TableWidget->setColumnWidth(0, fileNameColumnWidth);
-    ui->results_TableWidget->setColumnWidth(1, directoriesColumnWidth);
-    ui->results_TableWidget->setColumnWidth(2, sizesColumnWidth);
+    ui->results_TableWidget->setColumnWidth(fileNameColumn, fileNameColumnWidth);
+    ui->results_TableWidget->setColumnWidth(directoriesColumn, directoriesColumnWidth);
+    ui->results_TableWidget->setColumnWidth(sizesColumn, sizesColumnWidth);
     resultColumnWidthsInitialized_ = true;
 }
 

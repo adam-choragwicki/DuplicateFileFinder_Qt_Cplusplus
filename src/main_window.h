@@ -37,9 +37,14 @@ private:
     void initializeUI();
     void populateScanTypeComboBox();
     void initializeResultColumnWidths();
+    void sortResultGroups(int column, Qt::SortOrder sortOrder);
+    void populateResultTable();
 
     [[nodiscard]] QString getInitialDirectoryScanPath() const;
 
     Ui::MainWindow* ui;
+    QList<DuplicateGroup> resultDuplicateGroups_;
+    int resultSortColumn_{};
+    Qt::SortOrder resultSortOrder_{Qt::AscendingOrder};
     bool resultColumnWidthsInitialized_{};
 };
