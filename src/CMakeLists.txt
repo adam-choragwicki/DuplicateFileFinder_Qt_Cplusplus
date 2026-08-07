@@ -4,7 +4,7 @@ qt_add_executable(${PROJECT_NAME}
         main.cpp
         application.cpp application.h
         model.cpp model.h model.cpp
-        main_window.cpp main_window.h main_window.ui
+        view/main_window.cpp view/main_window.h view/main_window.ui
         controller.cpp controller.h
         log_manager.cpp log_manager.h
         scanner.cpp scanner.h

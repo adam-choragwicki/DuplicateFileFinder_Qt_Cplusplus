@@ -2,7 +2,7 @@
 
 #include "model.h"
 #include "controller.h"
-#include "main_window.h"
+#include "view/main_window.h"
 
 class Application : public QObject
 {
