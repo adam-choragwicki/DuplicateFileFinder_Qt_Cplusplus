@@ -27,26 +27,18 @@ signals:
 public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
-    void initializeResultTabColumns();
 
     [[nodiscard]] ScanType getScanType() const;
     void setDirectoryPathLabel(const QString& directoryPath);
     void showScanResult(const ScanResult& scanResult);
-    [[nodiscard]] QString getDirectoryPath() const { return ui->directoryPath_Label->text(); }
-    [[nodiscard]] const QList<DuplicateGroup>& getDisplayedDuplicateGroups() const { return resultDuplicateGroups_; }
+    [[nodiscard]] QString getDirectoryPath() const;
+    [[nodiscard]] const QList<DuplicateGroup>& getDisplayedDuplicateGroups() const;
 
 private:
     void initializeUI();
     void populateScanTypeComboBox();
-    void initializeResultColumnWidths();
-    void sortResultGroups(int column, Qt::SortOrder sortOrder);
-    void populateResultTable();
 
     [[nodiscard]] QString getInitialDirectoryScanPath() const;
 
     Ui::MainWindow* ui;
-    QList<DuplicateGroup> resultDuplicateGroups_;
-    int resultSortColumn_{};
-    Qt::SortOrder resultSortOrder_{Qt::AscendingOrder};
-    bool resultColumnWidthsInitialized_{};
 };

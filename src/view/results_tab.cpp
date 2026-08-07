@@ -1,14 +1,244 @@
 #include "results_tab.h"
 #include "ui_results_tab.h"
 
-ResultsTab::ResultsTab(QWidget* parent)
-    : QWidget(parent)
-      , ui(new Ui::ResultsTab)
+#include <QCollator>
+#include <QColor>
+#include <QFont>
+#include <QFontMetrics>
+#include <QHeaderView>
+#include <QTableWidgetItem>
+#include <QTimer>
+
+#include <algorithm>
+
+namespace
+{
+    constexpr int resultRowVerticalPadding = 4;
+    constexpr int fileNameColumn = 0;
+    constexpr int directoriesColumn = 1;
+    constexpr int sizesColumn = 2;
+
+    constexpr QColor referenceRowBackgroundColor{0xC0, 0xC0, 0xC0};
+    constexpr QColor referenceRowTextColor{0x20, 0x32, 0xE8};
+    constexpr QColor duplicateRowBackgroundColor{0xFF, 0xFF, 0xFF};
+    constexpr QColor duplicateRowTextColor{0x00, 0x00, 0x00};
+
+    QTableWidgetItem* createResultItem(const QString& text, const QFont& tableFont, const bool isReferenceFile)
+    {
+        auto* item = new QTableWidgetItem(text);
+        item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        item->setBackground(isReferenceFile ? referenceRowBackgroundColor : duplicateRowBackgroundColor);
+        item->setForeground(isReferenceFile ? referenceRowTextColor : duplicateRowTextColor);
+
+        QFont itemFont = tableFont;
+        itemFont.setBold(isReferenceFile);
+        item->setFont(itemFont);
+
+        return item;
+    }
+
+    int compareReferenceFiles(const FileRecord& leftFile, const FileRecord& rightFile, const int column, const QCollator& collator)
+    {
+        switch (column)
+        {
+            case fileNameColumn:
+                return collator.compare(leftFile.getFileName(), rightFile.getFileName());
+
+            case directoriesColumn:
+                return collator.compare(leftFile.getDirectoryPath(), rightFile.getDirectoryPath());
+
+            case sizesColumn:
+                if (leftFile.getSizeBytes() < rightFile.getSizeBytes())
+                {
+                    return -1;
+                }
+                if (leftFile.getSizeBytes() > rightFile.getSizeBytes())
+                {
+                    return 1;
+                }
+                return 0;
+
+            default:
+                qFatal("Cannot sort results by unknown column %d", column);
+        }
+    }
+}
+
+ResultsTab::ResultsTab(QWidget* parent) : QWidget(parent), ui(new Ui::ResultsTab)
 {
     ui->setupUi(this);
+    initializeTable();
 }
 
 ResultsTab::~ResultsTab()
 {
     delete ui;
+}
+
+void ResultsTab::initializeTable()
+{
+    ui->results_TableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    ui->results_TableWidget->setWordWrap(false);
+
+    // Disable sorting because QTableWidget sorts individual rows, which would separate duplicates from their reference file.
+    ui->results_TableWidget->setSortingEnabled(false);
+
+    QHeaderView* horizontalHeader = ui->results_TableWidget->horizontalHeader();
+    horizontalHeader->setSectionResizeMode(fileNameColumn, QHeaderView::Interactive);
+    horizontalHeader->setSectionResizeMode(directoriesColumn, QHeaderView::Interactive);
+    horizontalHeader->setSectionResizeMode(sizesColumn, QHeaderView::Interactive);
+    horizontalHeader->setSectionsClickable(true);
+    horizontalHeader->setSortIndicatorShown(true);
+    horizontalHeader->setSortIndicatorClearable(false);
+    horizontalHeader->setSortIndicator(fileNameColumn, Qt::AscendingOrder);
+
+    connect(horizontalHeader, &QHeaderView::sectionClicked, this, [this, horizontalHeader](const int column)
+    {
+        const Qt::SortOrder sortOrder = column == sortColumn_
+                                            ? (sortOrder_ == Qt::AscendingOrder ? Qt::DescendingOrder : Qt::AscendingOrder)
+                                            : Qt::AscendingOrder;
+
+        horizontalHeader->setSortIndicator(column, sortOrder);
+        sortResultGroups(column, sortOrder);
+    });
+
+    QHeaderView* verticalHeader = ui->results_TableWidget->verticalHeader();
+    const int resultRowHeight = QFontMetrics(ui->results_TableWidget->font()).height() + resultRowVerticalPadding;
+    verticalHeader->setSectionResizeMode(QHeaderView::Fixed);
+    verticalHeader->setMinimumSectionSize(resultRowHeight);
+    verticalHeader->setDefaultSectionSize(resultRowHeight);
+
+    connect(ui->results_TableWidget, &QTableWidget::cellDoubleClicked, this, [this](const int row, const int)
+    {
+        const QTableWidgetItem* fileNameItem = ui->results_TableWidget->item(row, fileNameColumn);
+
+        if (!fileNameItem)
+        {
+            qWarning() << "Cannot reveal a result file; row" << row << "has no file name item";
+            return;
+        }
+
+        emit revealFileInSystemFileManagerRequested(fileNameItem->data(Qt::UserRole).toString());
+    });
+}
+
+void ResultsTab::showDuplicateGroups(const QList<DuplicateGroup>& duplicateGroups)
+{
+    duplicateGroups_ = duplicateGroups;
+    sortColumn_ = fileNameColumn;
+    sortOrder_ = Qt::AscendingOrder;
+    ui->results_TableWidget->horizontalHeader()->setSortIndicator(sortColumn_, sortOrder_);
+
+    sortResultGroups(sortColumn_, sortOrder_);
+
+    if (!columnWidthsInitialized_)
+    {
+        // The main window selects this tab immediately after providing the result. Defer until its
+        // viewport has the final visible size and any scrollbar has been laid out.
+        QTimer::singleShot(0, this, &ResultsTab::initializeColumnWidths);
+    }
+}
+
+const QList<DuplicateGroup>& ResultsTab::getDisplayedDuplicateGroups() const
+{
+    return duplicateGroups_;
+}
+
+void ResultsTab::sortResultGroups(const int column, const Qt::SortOrder sortOrder)
+{
+    QCollator collator;
+    collator.setCaseSensitivity(Qt::CaseInsensitive);
+    collator.setNumericMode(true);
+
+    std::ranges::stable_sort(duplicateGroups_, [column, sortOrder, &collator](const DuplicateGroup& leftGroup, const DuplicateGroup& rightGroup)
+    {
+        const int comparison = compareReferenceFiles(
+            leftGroup.getFiles().constFirst(),
+            rightGroup.getFiles().constFirst(),
+            column,
+            collator);
+
+        return sortOrder == Qt::AscendingOrder ? comparison < 0 : comparison > 0;
+    });
+
+    sortColumn_ = column;
+    sortOrder_ = sortOrder;
+    populateTable();
+}
+
+void ResultsTab::populateTable()
+{
+    ui->results_TableWidget->setUpdatesEnabled(false);
+    ui->results_TableWidget->clearContents();
+
+    qsizetype filesInDuplicateGroupsCount = 0;
+    for (const DuplicateGroup& duplicateGroup: duplicateGroups_)
+    {
+        filesInDuplicateGroupsCount += duplicateGroup.getFiles().size();
+    }
+
+    ui->results_TableWidget->setRowCount(static_cast<int>(filesInDuplicateGroupsCount));
+
+    int row = 0;
+    const QFont tableFont = ui->results_TableWidget->font();
+
+    for (qsizetype groupIndex = 0; groupIndex < duplicateGroups_.size(); ++groupIndex)
+    {
+        const DuplicateGroup& duplicateGroup = duplicateGroups_.at(groupIndex);
+        const QList<FileRecord>& files = duplicateGroup.getFiles();
+
+        for (qsizetype fileIndex = 0; fileIndex < files.size(); ++fileIndex)
+        {
+            const FileRecord& file = files.at(fileIndex);
+            const bool isReferenceFile = fileIndex == 0;
+
+            QTableWidgetItem* fileNameItem = createResultItem(file.getFileName(), tableFont, isReferenceFile);
+            fileNameItem->setData(Qt::UserRole, file.getAbsoluteFilePath());
+
+            auto* rowNumberItem = new QTableWidgetItem(isReferenceFile ? QString::number(groupIndex + 1) : QString{});
+            rowNumberItem->setTextAlignment(Qt::AlignCenter);
+
+            ui->results_TableWidget->setVerticalHeaderItem(row, rowNumberItem);
+            ui->results_TableWidget->setItem(row, fileNameColumn, fileNameItem);
+            ui->results_TableWidget->setItem(row, directoriesColumn, createResultItem(file.getDirectoryPath(), tableFont, isReferenceFile));
+            ui->results_TableWidget->setItem(row, sizesColumn, createResultItem(QString::number(file.getSizeBytes() / 1024.0, 'f', 2), tableFont, isReferenceFile));
+
+            ++row;
+        }
+    }
+
+    ui->results_TableWidget->setUpdatesEnabled(true);
+}
+
+void ResultsTab::initializeColumnWidths()
+{
+    if (columnWidthsInitialized_)
+    {
+        return;
+    }
+
+    const int widthAvailableForColumns = ui->results_TableWidget->viewport()->width();
+
+    if (widthAvailableForColumns <= 0)
+    {
+        qWarning() << "Cannot initialize result column widths; results table viewport width is" << widthAvailableForColumns;
+        return;
+    }
+
+    constexpr int totalColumnWidthWeight = 10;
+    constexpr int fileNameColumnWidthWeight = 3;
+    constexpr int sizesColumnWidthWeight = 1;
+    constexpr int directoriesColumnWidthWeight = 6;
+
+    static_assert(fileNameColumnWidthWeight + sizesColumnWidthWeight + directoriesColumnWidthWeight == totalColumnWidthWeight,
+                  "Column width weights must sum to the total column width weight");
+
+    const int fileNameColumnWidth = widthAvailableForColumns * fileNameColumnWidthWeight / totalColumnWidthWeight;
+    const int sizesColumnWidth = widthAvailableForColumns * sizesColumnWidthWeight / totalColumnWidthWeight;
+    const int directoriesColumnWidth = widthAvailableForColumns - fileNameColumnWidth - sizesColumnWidth;
+
+    ui->results_TableWidget->setColumnWidth(fileNameColumn, fileNameColumnWidth);
+    ui->results_TableWidget->setColumnWidth(directoriesColumn, directoriesColumnWidth);
+    ui->results_TableWidget->setColumnWidth(sizesColumn, sizesColumnWidth);
+    columnWidthsInitialized_ = true;
 }

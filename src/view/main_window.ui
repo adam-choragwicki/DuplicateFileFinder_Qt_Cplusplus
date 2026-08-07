@@ -24,7 +24,7 @@
     <item>
      <widget class="QTabWidget" name="main_TabWidget">
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="directoriesTab">
        <attribute name="title">
@@ -140,31 +140,11 @@
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="resultsTab">
+      <widget class="ResultsTab" name="resultsTab">
        <attribute name="title">
         <string>Results</string>
        </attribute>
-       <layout class="QVBoxLayout" name="verticalLayout_4">
-        <item>
-         <widget class="QTableWidget" name="results_TableWidget">
-          <column>
-           <property name="text">
-            <string>File name</string>
-           </property>
-          </column>
-          <column>
-           <property name="text">
-            <string>Directories</string>
-           </property>
-          </column>
-          <column>
-           <property name="text">
-            <string>Sizes (KB)</string>
-           </property>
-          </column>
-         </widget>
-        </item>
-       </layout>
+       <layout class="QVBoxLayout" name="verticalLayout_4"/>
       </widget>
      </widget>
     </item>
@@ -176,7 +156,7 @@
      <x>0</x>
      <y>0</y>
      <width>1300</width>
-     <height>22</height>
+     <height>17</height>
     </rect>
    </property>
    <widget class="QMenu" name="file_Menu">
@@ -205,6 +185,14 @@
    </property>
   </action>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>ResultsTab</class>
+   <extends>QWidget</extends>
+   <header>view/results_tab.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>
