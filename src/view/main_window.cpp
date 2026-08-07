@@ -4,6 +4,7 @@
 
 #include <QComboBox>
 #include <QDir>
+#include <QMessageBox>
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWindow)
 {
@@ -14,10 +15,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
     initializeUI();
 
     connect(ui->chooseDirectory_PushButton, &QPushButton::clicked, this, &MainWindow::chooseDirectoryButtonClicked);
-    connect(ui->exportToHtml_Action, &QAction::triggered, this, &MainWindow::exportToHtmlRequested);
-    connect(ui->quit_Action, &QAction::triggered, this, &QWidget::close);
     connect(ui->resultsTab, &ResultsTab::revealFileInSystemFileManagerRequested, this, &MainWindow::revealFileInSystemFileManagerRequested);
     connect(ui->startScan_PushButton, &QPushButton::clicked, this, &MainWindow::startScanButtonClicked);
+
+    connect(ui->exportToHtml_Action, &QAction::triggered, this, &MainWindow::exportToHtmlRequested);
+    connect(ui->quit_Action, &QAction::triggered, this, &QWidget::close);
+    connect(ui->aboutDuplicateFileFinder_Action, &QAction::triggered, this, &MainWindow::showAboutDialog);
 }
 
 MainWindow::~MainWindow()
@@ -47,6 +50,18 @@ void MainWindow::populateScanTypeComboBox()
     }
 
     ui->scanType_ComboBox->setCurrentIndex(1); // choose "By file content"
+}
+
+void MainWindow::showAboutDialog()
+{
+    QMessageBox aboutDialog(
+        QMessageBox::Information,
+        QStringLiteral("About Duplicate file finder"),
+        QStringLiteral("Duplicate file finder\nVersion %1")
+        .arg(QString::fromUtf8(APP_VERSION)),
+        QMessageBox::Ok,
+        this);
+    aboutDialog.exec();
 }
 
 void MainWindow::setDirectoryPathLabel(const QString& directoryPath)

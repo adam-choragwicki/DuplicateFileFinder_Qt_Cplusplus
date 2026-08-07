@@ -37,6 +37,7 @@ public:
 private:
     void initializeUI();
     void populateScanTypeComboBox();
+    void showAboutDialog();
 
     [[nodiscard]] QString getInitialDirectoryScanPath() const;
 
