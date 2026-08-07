@@ -24,7 +24,7 @@
     <item>
      <widget class="QTabWidget" name="main_TabWidget">
       <property name="currentIndex">
-       <number>1</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="directoriesTab">
        <attribute name="title">
@@ -144,7 +144,6 @@
        <attribute name="title">
         <string>Results</string>
        </attribute>
-       <layout class="QVBoxLayout" name="verticalLayout_4"/>
       </widget>
      </widget>
     </item>

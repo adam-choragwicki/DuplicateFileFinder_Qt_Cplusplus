@@ -49,7 +49,7 @@ void MainWindow::populateScanTypeComboBox()
         ui->scanType_ComboBox->setItemData(i, Qt::AlignCenter, Qt::TextAlignmentRole);
     }
 
-    ui->scanType_ComboBox->setCurrentIndex(1); // choose "By file content"
+    ui->scanType_ComboBox->setCurrentIndex(0); // choose "By file name"
 }
 
 void MainWindow::showAboutDialog()
