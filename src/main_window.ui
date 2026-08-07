@@ -184,6 +184,7 @@
      <string>File</string>
     </property>
     <addaction name="exportToHtml_Action"/>
+    <addaction name="quit_Action"/>
    </widget>
    <addaction name="file_Menu"/>
   </widget>
@@ -193,6 +194,14 @@
    </property>
    <property name="text">
     <string>Export to HTML</string>
+   </property>
+  </action>
+  <action name="quit_Action">
+   <property name="text">
+    <string>Quit</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Q</string>
    </property>
   </action>
  </widget>
