@@ -15,7 +15,7 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
 
     qInfo() << "Started scan based on file content";
 
-    scanProgressCallback({.phase = ScanPhase::EnumeratingFiles, .processedFilesCount = 0, .totalFilesCount = std::nullopt});
+    scanProgressCallback({.phase = FileContentScanPhase::EnumeratingFiles, .processedFilesCount = 0, .totalFilesCount = std::nullopt});
 
     // Stage 1: Collecting files and grouping them by size
     const FileCollectionResult collectionResult = FileCollector::collectRecursively(
@@ -27,7 +27,7 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
             filesBySize[file.getSizeBytes()].append(std::move(file));
             ++enumeratedFilesCount;
 
-            scanProgressCallback({ScanPhase::EnumeratingFiles, enumeratedFilesCount, std::nullopt});
+            scanProgressCallback({FileContentScanPhase::EnumeratingFiles, enumeratedFilesCount, std::nullopt});
         });
 
     if (collectionResult.getStatus() == FileCollectionStatus::InvalidRootDirectory)
@@ -45,7 +45,7 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
         quint64 filesCheckedBySizeCount = 0;
         const quint64 collectedFilesCount = collectionResult.getMetrics().getScannedFilesCount();
 
-        scanProgressCallback({.phase = ScanPhase::IdentifyingEqualSizeCandidates, .processedFilesCount = 0, .totalFilesCount = collectedFilesCount});
+        scanProgressCallback({.phase = FileContentScanPhase::IdentifyingEqualSizeCandidates, .processedFilesCount = 0, .totalFilesCount = collectedFilesCount});
 
         // Count the files that need hashing first. This is an in-memory pass over the size groups,
         // so it gives the hashing phase an exact total without performing any additional file I/O.
@@ -65,14 +65,14 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
 
             filesCheckedBySizeCount += filesInSizeGroup;
 
-            scanProgressCallback({.phase = ScanPhase::IdentifyingEqualSizeCandidates, .processedFilesCount = filesCheckedBySizeCount, .totalFilesCount = collectedFilesCount});
+            scanProgressCallback({.phase = FileContentScanPhase::IdentifyingEqualSizeCandidates, .processedFilesCount = filesCheckedBySizeCount, .totalFilesCount = collectedFilesCount});
         }
 
         quint64 hashedCandidateFilesCount = 0;
 
         if (!stopToken.stop_requested() && scanProgressCallback)
         {
-            scanProgressCallback({.phase = ScanPhase::HashingDuplicateCandidateFiles, .processedFilesCount = 0, .totalFilesCount = duplicateCandidateFilesCount});
+            scanProgressCallback({.phase = FileContentScanPhase::HashingDuplicateCandidateFiles, .processedFilesCount = 0, .totalFilesCount = duplicateCandidateFilesCount});
         }
 
         for (auto sizeIterator = filesBySize.cbegin(); sizeIterator != filesBySize.cend() && !fileAccessFailed; ++sizeIterator)
@@ -116,7 +116,7 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
                 filesByHash[*fileHashValue].append(file);
                 ++hashedCandidateFilesCount;
 
-                scanProgressCallback({.phase = ScanPhase::HashingDuplicateCandidateFiles, .processedFilesCount = hashedCandidateFilesCount, .totalFilesCount = duplicateCandidateFilesCount});
+                scanProgressCallback({.phase = FileContentScanPhase::HashingDuplicateCandidateFiles, .processedFilesCount = hashedCandidateFilesCount, .totalFilesCount = duplicateCandidateFilesCount});
             }
 
             if (stopToken.stop_requested() || fileAccessFailed)
@@ -162,7 +162,7 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath, co
         {
             outcome = classifySuccessfulScan(collectionResult.getMetrics(), duplicateGroups);
 
-            scanProgressCallback({.phase = ScanPhase::BuildingScanResult, .processedFilesCount = collectedFilesCount, .totalFilesCount = collectedFilesCount});
+            scanProgressCallback({.phase = FileContentScanPhase::BuildingScanResult, .processedFilesCount = collectedFilesCount, .totalFilesCount = collectedFilesCount});
         }
     }
 

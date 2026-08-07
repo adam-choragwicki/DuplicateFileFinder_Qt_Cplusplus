@@ -14,7 +14,7 @@ struct Scanner::ProgressState
     // Protect the whole value so readers see one coherent phase/count snapshot instead of fields from two
     // different updates; accessing it concurrently without synchronization would be a data race.
     std::mutex mutex;
-    ScanProgress progress;
+    std::optional<ScanProgress> progress;
 };
 
 Scanner::Scanner(QObject* parent) : QObject(parent), progressState_(std::make_shared<ProgressState>())
@@ -76,15 +76,18 @@ void Scanner::scan(const ScanRequest& scanRequest)
 
     // Select the complete control-flow path before any scan work is scheduled.
     std::shared_ptr<const ScanWorkflow> scanWorkflow;
+    ScanPhase initialScanPhase = FileNameScanPhase::EnumeratingFiles;
 
     switch (scanRequest.getScanType())
     {
         case ScanType::ByFileName:
             scanWorkflow = std::make_shared<FileNameScanWorkflow>();
+            initialScanPhase = FileNameScanPhase::EnumeratingFiles;
             break;
 
         case ScanType::ByFileContent:
             scanWorkflow = std::make_shared<FileContentScanWorkflow>();
+            initialScanPhase = FileContentScanPhase::EnumeratingFiles;
             break;
     }
 
@@ -99,7 +102,7 @@ void Scanner::scan(const ScanRequest& scanRequest)
     {
         // UI-side write: use the same lock as later worker updates and timer snapshots.
         const std::lock_guard lock(progressState_->mutex);
-        progressState_->progress = {.phase = ScanPhase::EnumeratingFiles, .processedFilesCount = 0, .totalFilesCount = std::nullopt};
+        progressState_->progress = ScanProgress{.phase = initialScanPhase, .processedFilesCount = 0, .totalFilesCount = std::nullopt};
     }
 
     emitCurrentProgress();
@@ -131,7 +134,7 @@ void Scanner::scan(const ScanRequest& scanRequest)
 
 void Scanner::emitCurrentProgress()
 {
-    ScanProgress progress;
+    std::optional<ScanProgress> progress;
 
     {
         // UI-side read: copy all fields while locked, then release the mutex before emitting the
@@ -140,7 +143,10 @@ void Scanner::emitCurrentProgress()
         progress = progressState_->progress;
     }
 
-    emit progressChanged(progress);
+    if (progress.has_value())
+    {
+        emit progressChanged(*progress);
+    }
 }
 
 bool Scanner::isScanning() const

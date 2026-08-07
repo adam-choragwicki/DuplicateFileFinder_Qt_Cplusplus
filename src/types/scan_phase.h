@@ -1,43 +1,62 @@
 #pragma once
 
 #include <QString>
+#include <variant>
 
-enum class ScanPhase
+enum class FileNameScanPhase
 {
     EnumeratingFiles,
-    GroupingFilesBySize,
-    IdentifyingEqualSizeCandidates,
-    HashingDuplicateCandidateFiles,
-    GroupingCandidatesByHash,
-    IdentifyingEqualHashCandidates,
-    VerifyingFilesByteForByte,
     GroupingFilesByName,
     BuildingScanResult
 };
 
-inline QString scanPhaseDescription(const ScanPhase phase)
+enum class FileContentScanPhase
+{
+    EnumeratingFiles,
+    IdentifyingEqualSizeCandidates,
+    HashingDuplicateCandidateFiles,
+    BuildingScanResult
+};
+
+// variant enabling use of visitor in scanPhaseDescription
+using ScanPhase = std::variant<FileNameScanPhase, FileContentScanPhase>;
+
+inline QString scanPhaseDescription(const FileNameScanPhase phase)
 {
     switch (phase)
     {
-        case ScanPhase::EnumeratingFiles:
+        case FileNameScanPhase::EnumeratingFiles:
             return QStringLiteral("Enumerating files...");
-        case ScanPhase::GroupingFilesBySize:
-            return QStringLiteral("Grouping files by size...");
-        case ScanPhase::IdentifyingEqualSizeCandidates:
-            return QStringLiteral("Identifying equal-size candidates...");
-        case ScanPhase::HashingDuplicateCandidateFiles:
-            return QStringLiteral("Hashing and grouping duplicate-candidate files...");
-        case ScanPhase::GroupingCandidatesByHash:
-            return QStringLiteral("Grouping candidates by hash...");
-        case ScanPhase::IdentifyingEqualHashCandidates:
-            return QStringLiteral("Identifying equal-hash candidates...");
-        case ScanPhase::VerifyingFilesByteForByte:
-            return QStringLiteral("Verifying files byte for byte...");
-        case ScanPhase::GroupingFilesByName:
+        case FileNameScanPhase::GroupingFilesByName:
             return QStringLiteral("Grouping files by name...");
-        case ScanPhase::BuildingScanResult:
+        case FileNameScanPhase::BuildingScanResult:
             return QStringLiteral("Building scan result...");
     }
 
     return QStringLiteral("Scanning...");
+}
+
+inline QString scanPhaseDescription(const FileContentScanPhase phase)
+{
+    switch (phase)
+    {
+        case FileContentScanPhase::EnumeratingFiles:
+            return QStringLiteral("Enumerating files...");
+        case FileContentScanPhase::IdentifyingEqualSizeCandidates:
+            return QStringLiteral("Identifying equal-size candidates...");
+        case FileContentScanPhase::HashingDuplicateCandidateFiles:
+            return QStringLiteral("Hashing and grouping duplicate-candidate files...");
+        case FileContentScanPhase::BuildingScanResult:
+            return QStringLiteral("Building scan result...");
+    }
+
+    return QStringLiteral("Scanning...");
+}
+
+inline QString scanPhaseDescription(const ScanPhase& phase)
+{
+    return std::visit([](const auto workflowPhase)
+    {
+        return scanPhaseDescription(workflowPhase);
+    }, phase);
 }
