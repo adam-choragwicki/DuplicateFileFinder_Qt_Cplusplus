@@ -72,7 +72,7 @@ void Scanner::scan(const ScanRequest& scanRequest)
 
     qDebug() << "Scan started";
     qDebug() << "Root directory path" << scanRequest.getRootDirectoryPath();
-    qDebug() << "Scan type" << static_cast<int>(scanRequest.getScanType());
+    qDebug().noquote() << QString("Scan type: %1").arg(scanTypeToString(scanRequest.getScanType()));
 
     // Select the complete control-flow path before any scan work is scheduled.
     std::shared_ptr<const ScanWorkflow> scanWorkflow;
