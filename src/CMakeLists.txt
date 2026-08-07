@@ -5,6 +5,7 @@ qt_add_executable(${PROJECT_NAME}
         application.cpp application.h
         model.cpp model.h model.cpp
         view/main_window.cpp view/main_window.h view/main_window.ui
+        view/results_tab.cpp view/results_tab.h view/results_tab.ui
         controller.cpp controller.h
         log_manager.cpp log_manager.h
         scanner.cpp scanner.h
