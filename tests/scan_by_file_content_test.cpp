@@ -55,6 +55,7 @@ TEST_F(ScanByFileContentTest, CheckProgressPhases_SuccessfulScan)
             FileContentScanPhase::EnumeratingFiles,
             FileContentScanPhase::IdentifyingEqualSizeCandidates,
             FileContentScanPhase::HashingDuplicateCandidateFiles,
+            FileContentScanPhase::VerifyingMatchingHashCandidates,
             FileContentScanPhase::BuildingScanResult}));
 }
 
@@ -81,6 +82,7 @@ TEST_F(ScanByFileContentTest, CheckProgressCounters_SuccessfulScan)
     quint64 lastEnumeratedFilesCount = 0;
     quint64 lastSizeCheckedFilesCount = 0;
     quint64 lastHashedFilesCount = 0;
+    quint64 lastVerifiedFilesCount = 0;
     bool buildingResultPhaseWasReported = false;
 
     for (const ScanProgress& scanProgress: progressUpdates)
@@ -110,6 +112,14 @@ TEST_F(ScanByFileContentTest, CheckProgressCounters_SuccessfulScan)
             EXPECT_LE(scanProgress.processedFilesCount, *scanProgress.totalFilesCount);
             lastHashedFilesCount = scanProgress.processedFilesCount;
         }
+        else if (*phase == FileContentScanPhase::VerifyingMatchingHashCandidates)
+        {
+            ASSERT_TRUE(scanProgress.totalFilesCount.has_value());
+            EXPECT_EQ(*scanProgress.totalFilesCount, expectedHashCandidateFilesCount);
+            EXPECT_GE(scanProgress.processedFilesCount, lastVerifiedFilesCount);
+            EXPECT_LE(scanProgress.processedFilesCount, *scanProgress.totalFilesCount);
+            lastVerifiedFilesCount = scanProgress.processedFilesCount;
+        }
         else if (*phase == FileContentScanPhase::BuildingScanResult)
         {
             ASSERT_TRUE(scanProgress.totalFilesCount.has_value());
@@ -122,6 +132,7 @@ TEST_F(ScanByFileContentTest, CheckProgressCounters_SuccessfulScan)
     EXPECT_EQ(lastEnumeratedFilesCount, expectedFilesCount);
     EXPECT_EQ(lastSizeCheckedFilesCount, expectedFilesCount);
     EXPECT_EQ(lastHashedFilesCount, expectedHashCandidateFilesCount);
+    EXPECT_EQ(lastVerifiedFilesCount, expectedHashCandidateFilesCount);
     EXPECT_TRUE(buildingResultPhaseWasReported);
 }
 
@@ -408,6 +419,51 @@ TEST_F(ScanByFileContentTest, CheckHashGroupingAndSizePruning_RepeatedAndUniqueS
     EXPECT_EQ(summary->getTotalAmountOfPotentiallyRecoverableBytes(), 8);
 }
 
+/// Verifies that one matching-hash bucket is split into exact-content groups instead of treating a hash collision as proof that all files are duplicates.
+TEST_F(ScanByFileContentTest, CheckHashCollision_MatchingHashBucketIsPartitionedByExactContent)
+{
+    ASSERT_TRUE(writeFile("a/first-a", "AAAA"));
+    ASSERT_TRUE(writeFile("b/second-a", "AAAA"));
+    ASSERT_TRUE(writeFile("c/first-b", "BBBB"));
+    ASSERT_TRUE(writeFile("d/second-b", "BBBB"));
+    ASSERT_TRUE(writeFile("e/collision-only", "CCCC"));
+
+    const QString scanRootPath = getTemporaryScanRootPath();
+
+    const DuplicateGroup expectedFirstDuplicateGroup = createExpectedDuplicateGroup({
+        createExpectedFileRecord(scanRootPath, "a/first-a", 4),
+        createExpectedFileRecord(scanRootPath, "b/second-a", 4)
+    });
+
+    const DuplicateGroup expectedSecondDuplicateGroup = createExpectedDuplicateGroup({
+        createExpectedFileRecord(scanRootPath, "c/first-b", 4),
+        createExpectedFileRecord(scanRootPath, "d/second-b", 4)
+    });
+
+    const FileContentScanWorkflow scanWorkflow(
+        [](const FileRecord&, const std::stop_token&) -> std::optional<QByteArray>
+        {
+            // Returning one hash for every file simulates a cryptographic hash collision deterministically.
+            return QByteArray("forced-hash-collision");
+        });
+
+    const ScanResult scanResult = scanWorkflow.execute(
+        scanRootPath,
+        std::stop_source().get_token(),
+        ignoreProgressCallback);
+
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
+    ASSERT_EQ(scanResult.getDuplicateGroups().size(), 2);
+    EXPECT_TRUE(containsDuplicateGroup(scanResult, expectedFirstDuplicateGroup));
+    EXPECT_TRUE(containsDuplicateGroup(scanResult, expectedSecondDuplicateGroup));
+
+    const auto* summary = std::get_if<FileContentScanSummary>(&scanResult.getScanSummaryDetails());
+    ASSERT_NE(summary, nullptr);
+    EXPECT_EQ(summary->getDuplicateGroupsCount(), 2);
+    EXPECT_EQ(summary->getTotalFilesInDuplicateGroupsCount(), 4);
+    EXPECT_EQ(summary->getTotalAmountOfPotentiallyRecoverableBytes(), 8);
+}
+
 /// Verifies that losing a collected hash candidate before it is read causes the content scan to fail.
 TEST_F(ScanByFileContentTest, CheckFailedOutcome_CollectedCandidateRemovedBeforeHashing)
 {
@@ -433,6 +489,36 @@ TEST_F(ScanByFileContentTest, CheckFailedOutcome_CollectedCandidateRemovedBefore
         });
 
     EXPECT_TRUE(removedHashCandidate);
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Failed);
+    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
+}
+
+/// Verifies that losing a matching-hash candidate after hashing but before byte comparison causes the content scan to fail rather than report an unverified duplicate.
+TEST_F(ScanByFileContentTest, CheckFailedOutcome_HashCandidateRemovedBeforeByteComparison)
+{
+    ASSERT_TRUE(writeFile("one", "same"));
+    ASSERT_TRUE(writeFile("two", "same"));
+
+    const QString fileToRemove = QDir(getTemporaryScanRootPath()).filePath("one");
+    bool removedComparisonCandidate = false;
+    const ScanResult scanResult = FileContentScanWorkflow().execute(
+        getTemporaryScanRootPath(),
+        std::stop_source().get_token(),
+        [&fileToRemove, &removedComparisonCandidate](const ScanProgress& scanProgress)
+        {
+            const auto* phase = std::get_if<FileContentScanPhase>(&scanProgress.scanPhase);
+
+            if (!removedComparisonCandidate
+                && phase
+                && *phase == FileContentScanPhase::VerifyingMatchingHashCandidates
+                && scanProgress.processedFilesCount == 0)
+            {
+                // Both hashes have already been calculated; removal now exercises comparison failure.
+                removedComparisonCandidate = QFile::remove(fileToRemove);
+            }
+        });
+
+    EXPECT_TRUE(removedComparisonCandidate);
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Failed);
     EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
 }

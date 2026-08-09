@@ -15,6 +15,7 @@ enum class FileContentScanPhase
     EnumeratingFiles,
     IdentifyingEqualSizeCandidates,
     HashingDuplicateCandidateFiles,
+    VerifyingMatchingHashCandidates,
     BuildingScanResult
 };
 
@@ -46,6 +47,8 @@ inline QString scanPhaseDescription(const FileContentScanPhase phase)
             return QStringLiteral("Identifying equal-size candidates...");
         case FileContentScanPhase::HashingDuplicateCandidateFiles:
             return QStringLiteral("Hashing and grouping duplicate-candidate files...");
+        case FileContentScanPhase::VerifyingMatchingHashCandidates:
+            return QStringLiteral("Verifying matching-hash files byte by byte...");
         case FileContentScanPhase::BuildingScanResult:
             return QStringLiteral("Building scan result...");
     }

@@ -5,6 +5,8 @@ add_library(scan_core
         scan_workflow.h
         file_name_scan_workflow.cpp file_name_scan_workflow.h
         file_content_scan_workflow.cpp file_content_scan_workflow.h
+        file_comparator.cpp file_comparator.h
+        file_hasher.h
         scan_summary/scan_summary_logger.h
 )
 
@@ -27,7 +29,6 @@ qt_add_executable(${PROJECT_NAME}
         scanner.cpp scanner.h
         scan_request.h
         scan_progress.h
-        file_hasher.h
         html_result_exporter.cpp html_result_exporter.h
 
         scan_summary/scan_summary.h
