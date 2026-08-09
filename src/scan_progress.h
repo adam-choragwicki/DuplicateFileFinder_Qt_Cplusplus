@@ -7,7 +7,7 @@
 
 struct ScanProgress
 {
-    ScanPhase phase;
+    ScanPhase scanPhase;
     quint64 processedFilesCount{};
 
     // The number of files cannot be known during a single-pass directory enumeration.

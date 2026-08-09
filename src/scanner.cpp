@@ -102,7 +102,7 @@ void Scanner::scan(const ScanRequest& scanRequest)
     {
         // UI-side write: use the same lock as later worker updates and timer snapshots.
         const std::lock_guard lock(progressState_->mutex);
-        progressState_->progress = ScanProgress{.phase = initialScanPhase, .processedFilesCount = 0, .totalFilesCount = std::nullopt};
+        progressState_->progress = ScanProgress{.scanPhase = initialScanPhase, .processedFilesCount = 0, .totalFilesCount = std::nullopt};
     }
 
     emitCurrentProgress();

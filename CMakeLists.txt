@@ -11,5 +11,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets Concurrent)
+include(CTest)
 
 add_subdirectory(src)
+
+if (BUILD_TESTING)
+    add_subdirectory(tests)
+endif ()

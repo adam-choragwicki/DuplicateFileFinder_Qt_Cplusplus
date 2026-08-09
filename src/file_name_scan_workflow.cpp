@@ -53,7 +53,7 @@ ScanResult FileNameScanWorkflow::execute(const QString& rootDirectoryPath, const
 
     qInfo() << "Started scan based on file name; include file extension in comparison =" << includeFileExtensionInFileNameScan;
 
-    scanProgressCallback({.phase = FileNameScanPhase::EnumeratingFiles, .processedFilesCount = 0, .totalFilesCount = std::nullopt});
+    scanProgressCallback({.scanPhase = FileNameScanPhase::EnumeratingFiles, .processedFilesCount = 0, .totalFilesCount = std::nullopt});
 
     // Stage 1: Collecting files and grouping them by name
     const FileCollectionResult fileCollectionResult = FileCollector::collectRecursively(
@@ -66,7 +66,7 @@ ScanResult FileNameScanWorkflow::execute(const QString& rootDirectoryPath, const
             filesByName[fileNameComparisonKey].append(std::move(file));
             ++enumeratedFilesCount;
 
-            scanProgressCallback({.phase = FileNameScanPhase::EnumeratingFiles, .processedFilesCount = enumeratedFilesCount, .totalFilesCount = std::nullopt});
+            scanProgressCallback({.scanPhase = FileNameScanPhase::EnumeratingFiles, .processedFilesCount = enumeratedFilesCount, .totalFilesCount = std::nullopt});
         });
 
     if (fileCollectionResult.getStatus() == FileCollectionStatus::InvalidRootDirectory)
@@ -82,7 +82,7 @@ ScanResult FileNameScanWorkflow::execute(const QString& rootDirectoryPath, const
         quint64 processedFilesCount = 0;
         const quint64 collectedFilesCount = fileCollectionResult.getMetrics().getScannedFilesCount();
 
-        scanProgressCallback({.phase = FileNameScanPhase::GroupingFilesByName, .processedFilesCount = 0, .totalFilesCount = collectedFilesCount});
+        scanProgressCallback({.scanPhase = FileNameScanPhase::GroupingFilesByName, .processedFilesCount = 0, .totalFilesCount = collectedFilesCount});
 
         // Stage 2: Grouping files with duplicate names
         for (auto iterator = filesByName.cbegin(); iterator != filesByName.cend(); ++iterator)
@@ -96,7 +96,7 @@ ScanResult FileNameScanWorkflow::execute(const QString& rootDirectoryPath, const
             if (iterator.value().size() < 2)
             {
                 ++processedFilesCount;
-                scanProgressCallback({.phase = FileNameScanPhase::GroupingFilesByName, .processedFilesCount = processedFilesCount, .totalFilesCount = collectedFilesCount});
+                scanProgressCallback({.scanPhase = FileNameScanPhase::GroupingFilesByName, .processedFilesCount = processedFilesCount, .totalFilesCount = collectedFilesCount});
                 continue;
             }
 
@@ -110,14 +110,14 @@ ScanResult FileNameScanWorkflow::execute(const QString& rootDirectoryPath, const
             duplicateGroups.append(std::move(duplicateGroup));
             processedFilesCount += static_cast<quint64>(iterator.value().size());
 
-            scanProgressCallback({.phase = FileNameScanPhase::GroupingFilesByName, .processedFilesCount = processedFilesCount, .totalFilesCount = collectedFilesCount});
+            scanProgressCallback({.scanPhase = FileNameScanPhase::GroupingFilesByName, .processedFilesCount = processedFilesCount, .totalFilesCount = collectedFilesCount});
         }
 
         if (!stopToken.stop_requested())
         {
             outcome = classifySuccessfulScan(fileCollectionResult.getMetrics(), duplicateGroups);
 
-            scanProgressCallback({.phase = FileNameScanPhase::BuildingScanResult, .processedFilesCount = collectedFilesCount, .totalFilesCount = collectedFilesCount});
+            scanProgressCallback({.scanPhase = FileNameScanPhase::BuildingScanResult, .processedFilesCount = collectedFilesCount, .totalFilesCount = collectedFilesCount});
         }
     }
 

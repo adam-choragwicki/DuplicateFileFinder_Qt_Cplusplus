@@ -101,35 +101,25 @@ ScanType MainWindow::getScanType() const
 
 QString MainWindow::getInitialDirectoryScanPath() const
 {
-    constexpr enum class TestType
+    enum class TestType
     {
-        SMOKE_TEST,
-        RESULT_PRESENTATION_TEST,
-        BIG_DIRECTORY_TEST
-    } testType = TestType::RESULT_PRESENTATION_TEST; // adjust test type here
+        SmokeTest,
+        ResultPresentationTest,
+        BigDirectoryTest
+    };
 
-    if (testType == TestType::SMOKE_TEST)
-    {
-        QDir smokeTestFilesDirectory{QDir::currentPath()};
-        smokeTestFilesDirectory.cdUp();
-        smokeTestFilesDirectory.cd("test_files");
-        smokeTestFilesDirectory.cd("smoke_test");
-        return smokeTestFilesDirectory.path();
-    }
+    constexpr TestType testType = TestType::ResultPresentationTest; // adjust test type here
 
-    if (testType == TestType::RESULT_PRESENTATION_TEST)
-    {
-        QDir resultPresentationTestDirectoryPath{QDir::currentPath()};
-        resultPresentationTestDirectoryPath.cdUp();
-        resultPresentationTestDirectoryPath.cd("test_files");
-        resultPresentationTestDirectoryPath.cd("result_presentation_test");
-        return resultPresentationTestDirectoryPath.path();
-    }
+    const QDir fileSystemScenariosDirectory(QDir::cleanPath(QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("../tests/file_system_scenarios"))));
 
-    if (testType == TestType::BIG_DIRECTORY_TEST)
+    switch (testType)
     {
-        const QDir bigDirectoryPath = QString("C:") + QDir::separator() + QString("FULL_EXTERNAL_DISK");
-        return bigDirectoryPath.path();
+        case TestType::SmokeTest:
+            return fileSystemScenariosDirectory.filePath(QStringLiteral("smoke_test"));
+        case TestType::ResultPresentationTest:
+            return fileSystemScenariosDirectory.filePath(QStringLiteral("result_presentation_test"));
+        case TestType::BigDirectoryTest:
+            return QStringLiteral("C:/FULL_EXTERNAL_DISK");
     }
 
     throw std::runtime_error("Invalid TestType");

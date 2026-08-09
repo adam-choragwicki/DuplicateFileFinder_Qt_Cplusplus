@@ -112,7 +112,7 @@ void Controller::onScanProgressChanged(const ScanProgress& progress)
         return;
     }
 
-    QString progressText = scanPhaseDescription(progress.phase);
+    QString progressText = scanPhaseDescription(progress.scanPhase);
 
     if (!progress.totalFilesCount.has_value())
     {
