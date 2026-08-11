@@ -245,7 +245,7 @@ QString MainWindow::getInitialDirectoryScanPath() const
         case TestType::ResultPresentationTest:
             return fileSystemScenariosDirectory.filePath(QStringLiteral("result_presentation_test"));
         case TestType::BigDirectoryTest:
-            return QStringLiteral("C:/FULL_EXTERNAL_DISK");
+            return QStringLiteral("C:/FULL_EXTERNAL_DISK"); // TODO remove eventually
     }
 
     throw std::runtime_error("Invalid TestType");
