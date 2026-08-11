@@ -15,7 +15,7 @@ public:
     FileContentScanWorkflow();
     explicit FileContentScanWorkflow(const FileHashCalculator& fileHashCalculator);
 
-    [[nodiscard]] ScanResult execute(const QString& rootDirectoryPath, const std::stop_token& stopToken, const ScanProgressCallback& scanProgressCallback) const override;
+    [[nodiscard]] ScanResult execute(const QStringList& rootDirectoryPaths, const std::stop_token& stopToken, const ScanProgressCallback& scanProgressCallback) const override;
 
 private:
     enum class ContentScanStageStatus
@@ -53,7 +53,7 @@ private:
         const QList<DuplicateGroup> duplicateGroups_;
     };
 
-    [[nodiscard]] static FileCollectionStageResult collectFilesGroupedBySize(const QString& rootDirectoryPath,
+    [[nodiscard]] static FileCollectionStageResult collectFilesGroupedBySize(const QStringList& rootDirectoryPaths,
                                                                              const std::stop_token& stopToken,
                                                                              const ScanProgressCallback& scanProgressCallback);
 

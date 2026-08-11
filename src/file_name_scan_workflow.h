@@ -5,5 +5,5 @@
 class FileNameScanWorkflow final : public ScanWorkflow
 {
 public:
-    [[nodiscard]] ScanResult execute(const QString& rootDirectoryPath, const std::stop_token& stopToken, const ScanProgressCallback& scanProgressCallback) const override;
+    [[nodiscard]] ScanResult execute(const QStringList& rootDirectoryPaths, const std::stop_token& stopToken, const ScanProgressCallback& scanProgressCallback) const override;
 };

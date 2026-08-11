@@ -3,7 +3,41 @@
 #include <QDirIterator>
 #include <QFileInfo>
 
-FileCollectionResult FileCollector::collectRecursively(const QString& rootDirectoryPath, const std::stop_token& stopToken, const FileVisitor& fileVisitor)
+FileCollectionResult FileCollector::collectRecursively(const QStringList& rootDirectoryPaths, const std::stop_token& stopToken, const FileVisitor& fileVisitor)
+{
+    FileCollectionMetrics combinedMetrics;
+
+    if (stopToken.stop_requested())
+    {
+        return {FileCollectionStatus::Cancelled, combinedMetrics};
+    }
+
+    if (rootDirectoryPaths.isEmpty())
+    {
+        qCritical() << "Cannot scan because no root directories were provided";
+        return {FileCollectionStatus::InvalidRootDirectory, combinedMetrics};
+    }
+
+    for (const QString& rootDirectoryPath: rootDirectoryPaths)
+    {
+        const FileCollectionResult rootCollectionResult = collectSingleRootRecursively(rootDirectoryPath, stopToken, fileVisitor);
+        combinedMetrics.mergeFileCollectionMetrics(rootCollectionResult.getMetrics());
+
+        if (rootCollectionResult.getStatus() != FileCollectionStatus::Completed)
+        {
+            return {rootCollectionResult.getStatus(), combinedMetrics};
+        }
+
+        if (stopToken.stop_requested())
+        {
+            return {FileCollectionStatus::Cancelled, combinedMetrics};
+        }
+    }
+
+    return {FileCollectionStatus::Completed, combinedMetrics};
+}
+
+FileCollectionResult FileCollector::collectSingleRootRecursively(const QString& rootDirectoryPath, const std::stop_token& stopToken, const FileVisitor& fileVisitor)
 {
     FileCollectionMetrics metrics;
 
@@ -23,8 +57,8 @@ FileCollectionResult FileCollector::collectRecursively(const QString& rootDirect
     metrics.incrementScannedDirectoriesCount();
 
     QDirIterator iterator(rootDirectoryPath,
-        QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot,
-        QDirIterator::Subdirectories);
+                          QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot,
+                          QDirIterator::Subdirectories);
 
     while (iterator.hasNext())
     {

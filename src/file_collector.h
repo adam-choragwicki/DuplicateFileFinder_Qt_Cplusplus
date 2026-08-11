@@ -14,6 +14,13 @@ public:
     void incrementScannedDirectoriesCount() { ++scannedDirectoriesCount_; }
     void incrementScannedFilesCount() { ++scannedFilesCount_; }
 
+    void mergeFileCollectionMetrics(const FileCollectionMetrics& otherFileCollectionMetrics)
+    {
+        scannedDirectoriesCount_ += otherFileCollectionMetrics.scannedDirectoriesCount_;
+        scannedFilesCount_ += otherFileCollectionMetrics.scannedFilesCount_;
+        totalScannedBytes_ += otherFileCollectionMetrics.totalScannedBytes_;
+    }
+
     void addToTotalScannedBytes(const qint64 bytes)
     {
         if (bytes > 0)
@@ -58,5 +65,8 @@ class FileCollector final
 public:
     using FileVisitor = std::function<void(FileRecord)>;
 
-    [[nodiscard]] static FileCollectionResult collectRecursively(const QString& rootDirectoryPath, const std::stop_token& stopToken, const FileVisitor& fileVisitor);
+    [[nodiscard]] static FileCollectionResult collectRecursively(const QStringList& rootDirectoryPaths, const std::stop_token& stopToken, const FileVisitor& fileVisitor);
+
+private:
+    [[nodiscard]] static FileCollectionResult collectSingleRootRecursively(const QString& rootDirectoryPath, const std::stop_token& stopToken, const FileVisitor& fileVisitor);
 };

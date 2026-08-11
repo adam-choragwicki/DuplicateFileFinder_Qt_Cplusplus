@@ -41,7 +41,7 @@ namespace
     }
 }
 
-ScanResult FileNameScanWorkflow::execute(const QString& rootDirectoryPath, const std::stop_token& stopToken, const ScanProgressCallback& scanProgressCallback) const
+ScanResult FileNameScanWorkflow::execute(const QStringList& rootDirectoryPaths, const std::stop_token& stopToken, const ScanProgressCallback& scanProgressCallback) const
 {
     QElapsedTimer durationTimer;
     durationTimer.start();
@@ -56,18 +56,17 @@ ScanResult FileNameScanWorkflow::execute(const QString& rootDirectoryPath, const
     scanProgressCallback({.scanPhase = FileNameScanPhase::EnumeratingFiles, .processedFilesCount = 0, .totalFilesCount = std::nullopt});
 
     // Stage 1: Collecting files and grouping them by name
-    const FileCollectionResult fileCollectionResult = FileCollector::collectRecursively(
-        rootDirectoryPath,
-        stopToken,
-        [&filesByName, &enumeratedFilesCount, &scanProgressCallback](FileRecord file)
-        {
-            // visitor collecting files and grouping them by name
-            const QString fileNameComparisonKey = getFileNameComparisonKey(file.getFileName());
-            filesByName[fileNameComparisonKey].append(std::move(file));
-            ++enumeratedFilesCount;
+    const FileCollectionResult fileCollectionResult = FileCollector::collectRecursively(rootDirectoryPaths,
+                                                                                        stopToken,
+                                                                                        [&filesByName, &enumeratedFilesCount, &scanProgressCallback](FileRecord file)
+                                                                                        {
+                                                                                            // visitor collecting files and grouping them by name
+                                                                                            const QString fileNameComparisonKey = getFileNameComparisonKey(file.getFileName());
+                                                                                            filesByName[fileNameComparisonKey].append(std::move(file));
+                                                                                            ++enumeratedFilesCount;
 
-            scanProgressCallback({.scanPhase = FileNameScanPhase::EnumeratingFiles, .processedFilesCount = enumeratedFilesCount, .totalFilesCount = std::nullopt});
-        });
+                                                                                            scanProgressCallback({.scanPhase = FileNameScanPhase::EnumeratingFiles, .processedFilesCount = enumeratedFilesCount, .totalFilesCount = std::nullopt});
+                                                                                        });
 
     if (fileCollectionResult.getStatus() == FileCollectionStatus::InvalidRootDirectory)
     {

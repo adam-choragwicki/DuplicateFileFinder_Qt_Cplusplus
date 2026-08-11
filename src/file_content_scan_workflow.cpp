@@ -20,7 +20,7 @@ FileContentScanWorkflow::FileContentScanWorkflow(const FileHashCalculator& fileH
     Q_ASSERT(fileHashCalculator_ != nullptr);
 }
 
-ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath,
+ScanResult FileContentScanWorkflow::execute(const QStringList& rootDirectoryPaths,
                                             const std::stop_token& stopToken,
                                             const ScanProgressCallback& scanProgressCallback) const
 {
@@ -29,7 +29,7 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath,
 
     qInfo() << "Started scan based on file content";
 
-    const FileCollectionStageResult collectedFiles = collectFilesGroupedBySize(rootDirectoryPath, stopToken, scanProgressCallback);
+    const FileCollectionStageResult collectedFiles = collectFilesGroupedBySize(rootDirectoryPaths, stopToken, scanProgressCallback);
 
     const FileCollectionMetrics& fileCollectionMetrics = collectedFiles.collectionResult_.getMetrics();
 
@@ -98,7 +98,7 @@ ScanResult FileContentScanWorkflow::execute(const QString& rootDirectoryPath,
                                  durationTimer.elapsed());
 }
 
-FileContentScanWorkflow::FileCollectionStageResult FileContentScanWorkflow::collectFilesGroupedBySize(const QString& rootDirectoryPath,
+FileContentScanWorkflow::FileCollectionStageResult FileContentScanWorkflow::collectFilesGroupedBySize(const QStringList& rootDirectoryPaths,
                                                                                                       const std::stop_token& stopToken,
                                                                                                       const ScanProgressCallback& scanProgressCallback)
 {
@@ -111,21 +111,20 @@ FileContentScanWorkflow::FileCollectionStageResult FileContentScanWorkflow::coll
         .totalFilesCount = std::nullopt
     });
 
-    FileCollectionResult collectionResult = FileCollector::collectRecursively(
-        rootDirectoryPath,
-        stopToken,
-        [&filesGroupedBySize, &enumeratedFilesCount, &scanProgressCallback](FileRecord file)
-        {
-            // visitor collecting files and grouping them by size
-            filesGroupedBySize[file.getSizeBytes()].append(std::move(file));
-            ++enumeratedFilesCount;
+    const FileCollectionResult collectionResult = FileCollector::collectRecursively(rootDirectoryPaths,
+                                                                                    stopToken,
+                                                                                    [&filesGroupedBySize, &enumeratedFilesCount, &scanProgressCallback](FileRecord file)
+                                                                                    {
+                                                                                        // visitor collecting files and grouping them by size
+                                                                                        filesGroupedBySize[file.getSizeBytes()].append(std::move(file));
+                                                                                        ++enumeratedFilesCount;
 
-            scanProgressCallback({
-                .scanPhase = FileContentScanPhase::EnumeratingFiles,
-                .processedFilesCount = enumeratedFilesCount,
-                .totalFilesCount = std::nullopt
-            });
-        });
+                                                                                        scanProgressCallback({
+                                                                                            .scanPhase = FileContentScanPhase::EnumeratingFiles,
+                                                                                            .processedFilesCount = enumeratedFilesCount,
+                                                                                            .totalFilesCount = std::nullopt
+                                                                                        });
+                                                                                    });
 
     return {collectionResult, std::move(filesGroupedBySize)};
 }

@@ -5,6 +5,7 @@
 #include "scan_summary/scan_summary_logger.h"
 
 #include <QDebug>
+#include <QDir>
 #include <QtConcurrentRun>
 #include <mutex>
 
@@ -71,8 +72,19 @@ void Scanner::scan(const ScanRequest& scanRequest)
     }
 
     qDebug() << "Scan started";
-    qDebug() << "Root directory path" << scanRequest.getRootDirectoryPath();
+
     qDebug().noquote() << QString("Scan type: %1").arg(scanTypeToString(scanRequest.getScanType()));
+
+    const QStringList& rootDirectoryPaths = scanRequest.getRootDirectoryPaths();
+
+    qDebug().noquote() << QStringLiteral("Root directories to scan: %1:").arg(rootDirectoryPaths.size());
+
+    for (qsizetype directoryIndex = 0; directoryIndex < rootDirectoryPaths.size(); ++directoryIndex)
+    {
+        qDebug().noquote() << QStringLiteral("%1. %2")
+                .arg(directoryIndex + 1)
+                .arg(QDir::toNativeSeparators(rootDirectoryPaths.at(directoryIndex)));
+    }
 
     // Select the complete control-flow path before any scan work is scheduled.
     std::shared_ptr<const ScanWorkflow> scanWorkflow;
@@ -108,11 +120,10 @@ void Scanner::scan(const ScanRequest& scanRequest)
     emitCurrentProgress();
     progressTimer_.start();
 
-    const QString rootDirectoryPath = scanRequest.getRootDirectoryPath();
     const std::stop_token stopToken = stopSource_.get_token();
     const std::shared_ptr<ProgressState> progressState = progressState_;
 
-    scanWatcher_.setFuture(QtConcurrent::run([rootDirectoryPath, scanWorkflow, stopToken, progressState]
+    scanWatcher_.setFuture(QtConcurrent::run([rootDirectoryPaths, scanWorkflow, stopToken, progressState]
     {
         const ScanProgressCallback scanProgressCallback = [progressState](const ScanProgress& progress)
         {
@@ -121,7 +132,7 @@ void Scanner::scan(const ScanRequest& scanRequest)
             progressState->progress = progress;
         };
 
-        ScanResult scanResult = scanWorkflow->execute(rootDirectoryPath, stopToken, scanProgressCallback);
+        ScanResult scanResult = scanWorkflow->execute(rootDirectoryPaths, stopToken, scanProgressCallback);
 
         if (stopToken.stop_requested())
         {

@@ -21,7 +21,9 @@ TEST_F(ScanByFileContentTest, CheckDuplicateGroups_SmokeTest)
         createExpectedFileRecord(scanRootPath, "dir2/unique_2.log", 47)
     });
 
-    const ScanResult scanResult = FileContentScanWorkflow().execute(scanRootPath, std::stop_source().get_token(), ignoreProgressCallback);
+    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{scanRootPath},
+                                                                    std::stop_source().get_token(),
+                                                                    ignoreProgressCallback);
 
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
     ASSERT_EQ(scanResult.getDuplicateGroups().size(), 1);
@@ -39,13 +41,12 @@ TEST_F(ScanByFileContentTest, CheckProgressPhases_SuccessfulScan)
 {
     QList<ScanProgress> progressUpdates;
 
-    const ScanResult scanResult = FileContentScanWorkflow().execute(
-        getSmokeTestScanRootPath(),
-        std::stop_source().get_token(),
-        [&progressUpdates](const ScanProgress& scanProgress)
-        {
-            progressUpdates.append(scanProgress);
-        });
+    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{getSmokeTestScanRootPath()},
+                                                                    std::stop_source().get_token(),
+                                                                    [&progressUpdates](const ScanProgress& scanProgress)
+                                                                    {
+                                                                        progressUpdates.append(scanProgress);
+                                                                    });
 
     ASSERT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
     EXPECT_TRUE(containsOnlyPhasesFor<FileContentScanPhase>(progressUpdates));
@@ -67,13 +68,12 @@ TEST_F(ScanByFileContentTest, CheckProgressCounters_SuccessfulScan)
     ASSERT_TRUE(writeFile("unique.txt", "unique"));
 
     QList<ScanProgress> progressUpdates;
-    const ScanResult scanResult = FileContentScanWorkflow().execute(
-        getTemporaryScanRootPath(),
-        std::stop_source().get_token(),
-        [&progressUpdates](const ScanProgress& scanProgress)
-        {
-            progressUpdates.append(scanProgress);
-        });
+    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{getTemporaryScanRootPath()},
+                                                                    std::stop_source().get_token(),
+                                                                    [&progressUpdates](const ScanProgress& scanProgress)
+                                                                    {
+                                                                        progressUpdates.append(scanProgress);
+                                                                    });
 
     ASSERT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
 
@@ -146,10 +146,9 @@ TEST_F(ScanByFileContentTest, CheckSummaryMetrics_ControlledDirectoryTree)
     ASSERT_TRUE(writeFile("second/shared.log", duplicateContents));
     ASSERT_TRUE(writeFile("unique.txt", uniqueContents));
 
-    const ScanResult scanResult = FileContentScanWorkflow().execute(
-        getTemporaryScanRootPath(),
-        std::stop_source().get_token(),
-        ignoreProgressCallback);
+    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{getTemporaryScanRootPath()},
+                                                                    std::stop_source().get_token(),
+                                                                    ignoreProgressCallback);
 
     ASSERT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
     const auto* summary = std::get_if<FileContentScanSummary>(&scanResult.getScanSummaryDetails());
@@ -170,10 +169,9 @@ TEST_F(ScanByFileContentTest, CheckSummaryMetrics_ControlledDirectoryTree)
 /// Verifies that scanning an empty directory produces a no-files-found outcome.
 TEST_F(ScanByFileContentTest, CheckNoFilesOutcome_EmptyDirectory)
 {
-    const ScanResult scanResult = FileContentScanWorkflow().execute(
-        getTemporaryScanRootPath(),
-        std::stop_source().get_token(),
-        ignoreProgressCallback);
+    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{getTemporaryScanRootPath()},
+                                                                    std::stop_source().get_token(),
+                                                                    ignoreProgressCallback);
 
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::NoFilesFound);
     EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
@@ -185,7 +183,9 @@ TEST_F(ScanByFileContentTest, CheckCancelledOutcome_StopRequestedBeforeScan)
     std::stop_source stopSource;
     stopSource.request_stop();
 
-    const ScanResult scanResult = FileContentScanWorkflow().execute(getTemporaryScanRootPath(), stopSource.get_token(), ignoreProgressCallback);
+    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{getTemporaryScanRootPath()},
+                                                                    stopSource.get_token(),
+                                                                    ignoreProgressCallback);
 
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Cancelled);
     EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
@@ -194,10 +194,9 @@ TEST_F(ScanByFileContentTest, CheckCancelledOutcome_StopRequestedBeforeScan)
 /// Verifies that scanning a nonexistent root directory produces a failed outcome.
 TEST_F(ScanByFileContentTest, CheckFailedOutcome_RootDirectoryDoesNotExist)
 {
-    const ScanResult scanResult = FileContentScanWorkflow().execute(
-        QDir(getTemporaryScanRootPath()).filePath("missing"),
-        std::stop_source().get_token(),
-        ignoreProgressCallback);
+    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{QDir(getTemporaryScanRootPath()).filePath("missing")},
+                                                                    std::stop_source().get_token(),
+                                                                    ignoreProgressCallback);
 
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Failed);
     EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
@@ -208,10 +207,9 @@ TEST_F(ScanByFileContentTest, CheckCompletedWithoutDuplicatesOutcome_DirectoryCo
 {
     ASSERT_TRUE(writeFile("only-file", "unique"));
 
-    const ScanResult scanResult = FileContentScanWorkflow().execute(
-        getTemporaryScanRootPath(),
-        std::stop_source().get_token(),
-        ignoreProgressCallback);
+    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{getTemporaryScanRootPath()},
+                                                                    std::stop_source().get_token(),
+                                                                    ignoreProgressCallback);
 
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithoutDuplicates);
     EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
@@ -226,21 +224,20 @@ TEST_F(ScanByFileContentTest, CheckCancelledOutcome_StopRequestedDuringFileEnume
     std::stop_source stopSource;
     bool stopWasRequestedAfterFirstFile = false;
 
-    const ScanResult scanResult = FileContentScanWorkflow().execute(
-        getTemporaryScanRootPath(),
-        stopSource.get_token(),
-        [&stopSource, &stopWasRequestedAfterFirstFile](const ScanProgress& scanProgress)
-        {
-            const auto* phase = std::get_if<FileContentScanPhase>(&scanProgress.scanPhase);
+    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{getTemporaryScanRootPath()},
+                                                                    stopSource.get_token(),
+                                                                    [&stopSource, &stopWasRequestedAfterFirstFile](const ScanProgress& scanProgress)
+                                                                    {
+                                                                        const auto* phase = std::get_if<FileContentScanPhase>(&scanProgress.scanPhase);
 
-            if (!stopWasRequestedAfterFirstFile
-                && phase
-                && *phase == FileContentScanPhase::EnumeratingFiles
-                && scanProgress.processedFilesCount == 1)
-            {
-                stopWasRequestedAfterFirstFile = stopSource.request_stop();
-            }
-        });
+                                                                        if (!stopWasRequestedAfterFirstFile
+                                                                            && phase
+                                                                            && *phase == FileContentScanPhase::EnumeratingFiles
+                                                                            && scanProgress.processedFilesCount == 1)
+                                                                        {
+                                                                            stopWasRequestedAfterFirstFile = stopSource.request_stop();
+                                                                        }
+                                                                    });
 
     EXPECT_TRUE(stopWasRequestedAfterFirstFile);
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Cancelled);
@@ -255,20 +252,19 @@ TEST_F(ScanByFileContentTest, CheckCancelledOutcome_StopRequestedDuringHashing)
 
     std::stop_source stopSource;
     bool cancellationRequestedDuringHashing = false;
-    const ScanResult scanResult = FileContentScanWorkflow().execute(
-        getTemporaryScanRootPath(),
-        stopSource.get_token(),
-        [&stopSource, &cancellationRequestedDuringHashing](const ScanProgress& scanProgress)
-        {
-            const auto* phase = std::get_if<FileContentScanPhase>(&scanProgress.scanPhase);
+    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{getTemporaryScanRootPath()},
+                                                                    stopSource.get_token(),
+                                                                    [&stopSource, &cancellationRequestedDuringHashing](const ScanProgress& scanProgress)
+                                                                    {
+                                                                        const auto* phase = std::get_if<FileContentScanPhase>(&scanProgress.scanPhase);
 
-            if (phase
-                && *phase == FileContentScanPhase::HashingDuplicateCandidateFiles
-                && scanProgress.processedFilesCount == 1)
-            {
-                cancellationRequestedDuringHashing = stopSource.request_stop();
-            }
-        });
+                                                                        if (phase
+                                                                            && *phase == FileContentScanPhase::HashingDuplicateCandidateFiles
+                                                                            && scanProgress.processedFilesCount == 1)
+                                                                        {
+                                                                            cancellationRequestedDuringHashing = stopSource.request_stop();
+                                                                        }
+                                                                    });
 
     EXPECT_TRUE(cancellationRequestedDuringHashing);
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Cancelled);
@@ -291,7 +287,7 @@ TEST_F(ScanByFileContentTest, CheckDuplicateGroups_ThreeIdenticalFiles)
         createExpectedFileRecord(scanRootPath, "third/file.txt", duplicateContents.size())
     });
 
-    const ScanResult scanResult = FileContentScanWorkflow().execute(scanRootPath, std::stop_source().get_token(), ignoreProgressCallback);
+    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{scanRootPath}, std::stop_source().get_token(), ignoreProgressCallback);
 
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
     ASSERT_EQ(scanResult.getDuplicateGroups().size(), 1);
@@ -339,7 +335,9 @@ TEST_F(ScanByFileContentTest, CheckBinaryAndEmptyDuplicateGroups_LargeAndEmptyFi
         createExpectedFileRecord(scanRootPath, "b/second.dat", duplicateBytes.size())
     });
 
-    const ScanResult scanResult = FileContentScanWorkflow().execute(scanRootPath, std::stop_source().get_token(), ignoreProgressCallback);
+    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{scanRootPath},
+                                                                    std::stop_source().get_token(),
+                                                                    ignoreProgressCallback);
 
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
     ASSERT_EQ(scanResult.getDuplicateGroups().size(), 2);
@@ -382,13 +380,12 @@ TEST_F(ScanByFileContentTest, CheckHashGroupingAndSizePruning_RepeatedAndUniqueS
     });
 
     QList<ScanProgress> progressUpdates;
-    const ScanResult scanResult = FileContentScanWorkflow().execute(
-        scanRootPath,
-        std::stop_source().get_token(),
-        [&progressUpdates](const ScanProgress& scanProgress)
-        {
-            progressUpdates.append(scanProgress);
-        });
+    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{scanRootPath},
+                                                                    std::stop_source().get_token(),
+                                                                    [&progressUpdates](const ScanProgress& scanProgress)
+                                                                    {
+                                                                        progressUpdates.append(scanProgress);
+                                                                    });
 
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
     ASSERT_EQ(scanResult.getDuplicateGroups().size(), 2);
@@ -447,10 +444,9 @@ TEST_F(ScanByFileContentTest, CheckHashCollision_MatchingHashBucketIsPartitioned
             return QByteArray("forced-hash-collision");
         });
 
-    const ScanResult scanResult = scanWorkflow.execute(
-        scanRootPath,
-        std::stop_source().get_token(),
-        ignoreProgressCallback);
+    const ScanResult scanResult = scanWorkflow.execute(QStringList{scanRootPath},
+                                                       std::stop_source().get_token(),
+                                                       ignoreProgressCallback);
 
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
     ASSERT_EQ(scanResult.getDuplicateGroups().size(), 2);
@@ -472,21 +468,20 @@ TEST_F(ScanByFileContentTest, CheckFailedOutcome_CollectedCandidateRemovedBefore
 
     const QString fileToRemove = QDir(getTemporaryScanRootPath()).filePath("one");
     bool removedHashCandidate = false;
-    const ScanResult scanResult = FileContentScanWorkflow().execute(
-        getTemporaryScanRootPath(),
-        std::stop_source().get_token(),
-        [&fileToRemove, &removedHashCandidate](const ScanProgress& scanProgress)
-        {
-            const auto* phase = std::get_if<FileContentScanPhase>(&scanProgress.scanPhase);
+    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{getTemporaryScanRootPath()},
+                                                                    std::stop_source().get_token(),
+                                                                    [&fileToRemove, &removedHashCandidate](const ScanProgress& scanProgress)
+                                                                    {
+                                                                        const auto* phase = std::get_if<FileContentScanPhase>(&scanProgress.scanPhase);
 
-            if (!removedHashCandidate
-                && phase
-                && *phase == FileContentScanPhase::HashingDuplicateCandidateFiles
-                && scanProgress.processedFilesCount == 0)
-            {
-                removedHashCandidate = QFile::remove(fileToRemove);
-            }
-        });
+                                                                        if (!removedHashCandidate
+                                                                            && phase
+                                                                            && *phase == FileContentScanPhase::HashingDuplicateCandidateFiles
+                                                                            && scanProgress.processedFilesCount == 0)
+                                                                        {
+                                                                            removedHashCandidate = QFile::remove(fileToRemove);
+                                                                        }
+                                                                    });
 
     EXPECT_TRUE(removedHashCandidate);
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Failed);
@@ -501,22 +496,21 @@ TEST_F(ScanByFileContentTest, CheckFailedOutcome_HashCandidateRemovedBeforeByteC
 
     const QString fileToRemove = QDir(getTemporaryScanRootPath()).filePath("one");
     bool removedComparisonCandidate = false;
-    const ScanResult scanResult = FileContentScanWorkflow().execute(
-        getTemporaryScanRootPath(),
-        std::stop_source().get_token(),
-        [&fileToRemove, &removedComparisonCandidate](const ScanProgress& scanProgress)
-        {
-            const auto* phase = std::get_if<FileContentScanPhase>(&scanProgress.scanPhase);
+    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{getTemporaryScanRootPath()},
+                                                                    std::stop_source().get_token(),
+                                                                    [&fileToRemove, &removedComparisonCandidate](const ScanProgress& scanProgress)
+                                                                    {
+                                                                        const auto* phase = std::get_if<FileContentScanPhase>(&scanProgress.scanPhase);
 
-            if (!removedComparisonCandidate
-                && phase
-                && *phase == FileContentScanPhase::VerifyingMatchingHashCandidates
-                && scanProgress.processedFilesCount == 0)
-            {
-                // Both hashes have already been calculated; removal now exercises comparison failure.
-                removedComparisonCandidate = QFile::remove(fileToRemove);
-            }
-        });
+                                                                        if (!removedComparisonCandidate
+                                                                            && phase
+                                                                            && *phase == FileContentScanPhase::VerifyingMatchingHashCandidates
+                                                                            && scanProgress.processedFilesCount == 0)
+                                                                        {
+                                                                            // Both hashes have already been calculated; removal now exercises comparison failure.
+                                                                            removedComparisonCandidate = QFile::remove(fileToRemove);
+                                                                        }
+                                                                    });
 
     EXPECT_TRUE(removedComparisonCandidate);
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Failed);

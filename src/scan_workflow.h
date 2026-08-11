@@ -4,7 +4,7 @@
 #include "file_collector.h"
 #include "scan_progress.h"
 
-#include <QString>
+#include <QStringList>
 #include <stop_token>
 
 class ScanWorkflow
@@ -12,7 +12,7 @@ class ScanWorkflow
 public:
     virtual ~ScanWorkflow() = default;
 
-    [[nodiscard]] virtual ScanResult execute(const QString& rootDirectoryPath, const std::stop_token& stopToken, const ScanProgressCallback& progressCallback) const = 0;
+    [[nodiscard]] virtual ScanResult execute(const QStringList& rootDirectoryPaths, const std::stop_token& stopToken, const ScanProgressCallback& progressCallback) const = 0;
 };
 
 class DuplicateGroupMetrics

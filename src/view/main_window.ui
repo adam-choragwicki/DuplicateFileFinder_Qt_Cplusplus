@@ -28,7 +28,7 @@
       </property>
       <widget class="QWidget" name="directoriesTab">
        <attribute name="title">
-        <string>Scan options</string>
+        <string>Directories</string>
        </attribute>
        <layout class="QVBoxLayout" name="verticalLayout_3">
         <item>
@@ -105,49 +105,34 @@
            </layout>
           </item>
           <item>
-           <layout class="QHBoxLayout" name="horizontalLayout">
-            <item>
-             <widget class="QPushButton" name="chooseDirectory_PushButton">
-              <property name="font">
-               <font>
-                <pointsize>18</pointsize>
-                <bold>true</bold>
-               </font>
-              </property>
-              <property name="text">
-               <string>Choose directory</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="directoryPath_Label">
-              <property name="font">
-               <font>
-                <pointsize>18</pointsize>
-               </font>
-              </property>
-              <property name="text">
-               <string>Directory path</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignmentFlag::AlignCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <spacer name="horizontalSpacer_2">
-              <property name="orientation">
-               <enum>Qt::Orientation::Horizontal</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>40</width>
-                <height>20</height>
-               </size>
-              </property>
-             </spacer>
-            </item>
-           </layout>
+           <widget class="QLabel" name="instructionLabel">
+            <property name="text">
+             <string>Add at least one directory to scan and press &quot;Start scan&quot;</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="addDirectory_PushButton">
+            <property name="text">
+             <string>Add directory</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="removeDirectory_PushButton">
+            <property name="text">
+             <string>Remove directory</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QTreeWidget" name="directories_TreeWidget">
+            <column>
+             <property name="text">
+              <string>Path</string>
+             </property>
+            </column>
+           </widget>
           </item>
           <item>
            <spacer name="verticalSpacer">

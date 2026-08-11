@@ -3,8 +3,10 @@
 #include "scan_request.h"
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QEventLoop>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QMessageBox>
 #include <QProcess>
 #include <QProgressDialog>
@@ -16,7 +18,8 @@ Controller::Controller(Model& model, MainWindow& view) : model_(model), view_(vi
     qInfo() << "Initializing controller";
 
     connect(&view_, &MainWindow::startScanButtonClicked, this, &Controller::onStartScanButtonClicked);
-    connect(&view_, &MainWindow::chooseDirectoryButtonClicked, this, &Controller::onChooseDirectoryButtonClicked);
+    connect(&view_, &MainWindow::addDirectoryButtonClicked, this, &Controller::onAddDirectoryButtonClicked);
+    connect(&view_, &MainWindow::removeDirectoryButtonClicked, this, &Controller::onRemoveDirectoryButtonClicked);
     connect(&view_, &MainWindow::exportToHtmlRequested, this, &Controller::onExportToHtmlRequested);
     connect(&view_, &MainWindow::revealFileInSystemFileManagerRequested, this, &Controller::revealFileInSystemFileManager);
     connect(&scanner_, &Scanner::progressChanged, this, &Controller::onScanProgressChanged);
@@ -64,14 +67,24 @@ void Controller::onStartScanButtonClicked()
         return;
     }
 
-    const ScanRequest scanRequest(view_.getDirectoryPath(), view_.getScanType());
+    const QStringList scanDirectoryPaths = view_.getScanDirectoryPaths();
 
-    scanProgressDialog_ = new QProgressDialog(
-        "Preparing scan...",
-        "Cancel",
-        0,
-        0,
-        &view_);
+    if (scanDirectoryPaths.isEmpty())
+    {
+        QMessageBox::information(
+            &view_,
+            "Nothing to scan",
+            "Nothing to scan. No directories selected.");
+        return;
+    }
+
+    const ScanRequest scanRequest(scanDirectoryPaths, view_.getScanType());
+
+    scanProgressDialog_ = new QProgressDialog("Preparing scan...",
+                                              "Cancel",
+                                              0,
+                                              0,
+                                              &view_);
     scanProgressDialog_->setWindowTitle("Scanning");
     scanProgressDialog_->setWindowModality(Qt::WindowModal);
     scanProgressDialog_->setMinimumDuration(0);
@@ -89,20 +102,83 @@ void Controller::onStartScanButtonClicked()
     scanner_.scan(scanRequest);
 }
 
-void Controller::onChooseDirectoryButtonClicked()
+void Controller::onAddDirectoryButtonClicked()
 {
-    qDebug() << "Choose directory clicked";
+    qDebug() << "Add directory clicked";
 
     const QString directoryPath = QFileDialog::getExistingDirectory(&view_, "Choose directory to scan", QDir::currentPath(), QFileDialog::DontResolveSymlinks);
 
-    if (!directoryPath.isEmpty())
+    if (directoryPath.isEmpty())
     {
-        view_.setDirectoryPathLabel(directoryPath);
+        return;
     }
-    else
+
+    const QString normalizedDirectoryPath = normalizeDirectoryPath(directoryPath);
+    const QStringList existingDirectoryPaths = view_.getScanDirectoryPaths();
+
+    for (const QString& existingDirectoryPath: existingDirectoryPaths)
     {
-        qWarning() << "Directory path is empty";
+        if (isSameDirectoryOrSubdirectoryOf(normalizedDirectoryPath, existingDirectoryPath))
+        {
+            QMessageBox::information(&view_,
+                                     "Directory already included",
+                                     QStringLiteral("Directory \"%1\" is already in the list because it is covered by \"%2\".")
+                                     .arg(
+                                         QDir::toNativeSeparators(normalizedDirectoryPath),
+                                         QDir::toNativeSeparators(existingDirectoryPath)));
+            return;
+        }
     }
+
+    // A newly selected parent replaces every existing scan root contained inside it. Scanning
+    // both would enumerate the nested root twice and could report the same file more than once.
+    for (const QString& existingDirectoryPath: existingDirectoryPaths)
+    {
+        if (isSameDirectoryOrSubdirectoryOf(existingDirectoryPath, normalizedDirectoryPath))
+        {
+            view_.removeScanDirectory(existingDirectoryPath);
+        }
+    }
+
+    view_.addScanDirectory(normalizedDirectoryPath);
+}
+
+void Controller::onRemoveDirectoryButtonClicked()
+{
+    qDebug() << "Remove directory clicked";
+
+    view_.removeSelectedScanDirectory();
+}
+
+QString Controller::normalizeDirectoryPath(const QString& directoryPath)
+{
+    return QDir::cleanPath(QDir::fromNativeSeparators(QDir(directoryPath).absolutePath()));
+}
+
+bool Controller::isSameDirectoryOrSubdirectoryOf(const QString& directoryPath, const QString& possibleParentDirectoryPath)
+{
+    const QString normalizedDirectoryPath = normalizeDirectoryPath(directoryPath);
+    const QString normalizedParentDirectoryPath = normalizeDirectoryPath(possibleParentDirectoryPath);
+
+#if defined(Q_OS_WIN)
+    constexpr Qt::CaseSensitivity pathCaseSensitivity = Qt::CaseInsensitive;
+#else
+    constexpr Qt::CaseSensitivity pathCaseSensitivity = Qt::CaseSensitive;
+#endif
+
+    if (normalizedDirectoryPath.compare(normalizedParentDirectoryPath, pathCaseSensitivity) == 0)
+    {
+        return true;
+    }
+
+    QString parentDirectoryPathPrefix = normalizedParentDirectoryPath;
+
+    if (!parentDirectoryPathPrefix.endsWith('/'))
+    {
+        parentDirectoryPathPrefix.append('/');
+    }
+
+    return normalizedDirectoryPath.startsWith(parentDirectoryPathPrefix, pathCaseSensitivity);
 }
 
 void Controller::onScanProgressChanged(const ScanProgress& progress)

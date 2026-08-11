@@ -16,7 +16,8 @@ public:
 private slots:
     void onExportToHtmlRequested();
     void onStartScanButtonClicked();
-    void onChooseDirectoryButtonClicked();
+    void onAddDirectoryButtonClicked();
+    void onRemoveDirectoryButtonClicked();
     void onScanProgressChanged(const ScanProgress& progress);
     void onScanOperationComplete(const ScanResult& scanResult);
     void onScanOperationCancelled();
@@ -24,6 +25,12 @@ private slots:
 private:
     void closeScanProgressDialog();
     void revealFileInSystemFileManager(const QString& absoluteFilePath);
+
+    /// Returns an absolute, cleaned directory path using Qt's '/' separator format without resolving symbolic links.
+    [[nodiscard]] static QString normalizeDirectoryPath(const QString& directoryPath);
+
+    /// Returns true when directoryPath is the same as, or is located anywhere below, possibleParentDirectoryPath.
+    [[nodiscard]] static bool isSameDirectoryOrSubdirectoryOf(const QString& directoryPath, const QString& possibleParentDirectoryPath);
 
     Model& model_;
     MainWindow& view_;
