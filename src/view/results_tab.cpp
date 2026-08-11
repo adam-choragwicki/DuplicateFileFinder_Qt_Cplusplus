@@ -8,6 +8,8 @@
 #include <QHeaderView>
 #include <QTableWidgetItem>
 #include <QTimer>
+#include <QClipboard>
+#include <QMenu>
 
 #include <algorithm>
 
@@ -78,6 +80,7 @@ ResultsTab::~ResultsTab()
 void ResultsTab::initializeTable()
 {
     ui->results_TableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    ui->results_TableWidget->setContextMenuPolicy(Qt::CustomContextMenu);
     ui->results_TableWidget->setWordWrap(false);
 
     // Disable sorting because QTableWidget sorts individual rows, which would separate duplicates from their reference file.
@@ -110,16 +113,74 @@ void ResultsTab::initializeTable()
 
     connect(ui->results_TableWidget, &QTableWidget::cellDoubleClicked, this, [this](const int row, const int)
     {
-        const QTableWidgetItem* fileNameItem = ui->results_TableWidget->item(row, fileNameColumn);
-
-        if (!fileNameItem)
-        {
-            qWarning() << "Cannot reveal a result file; row" << row << "has no file name item";
-            return;
-        }
-
-        emit revealFileInSystemFileManagerRequested(fileNameItem->data(Qt::UserRole).toString());
+        revealFileInSystemFileManager(row);
     });
+
+    connect(ui->results_TableWidget, &QTableWidget::customContextMenuRequested, this, &ResultsTab::showResultContextMenu);
+}
+
+/// Get absolute file path of an item in a given row. The item represents a file.
+QString ResultsTab::getAbsoluteFilePathForRow(const int row) const
+{
+    const QTableWidgetItem* fileNameItem = ui->results_TableWidget->item(row, fileNameColumn);
+
+    if (!fileNameItem)
+    {
+        qWarning() << "Cannot access a result file; row" << row << "has no file name item";
+        return {};
+    }
+
+    const QString absoluteFilePath = fileNameItem->data(Qt::UserRole).toString();
+
+    if (absoluteFilePath.isEmpty())
+    {
+        qWarning() << "Cannot access a result file; row" << row << "has no absolute file path";
+    }
+
+    return absoluteFilePath;
+}
+
+void ResultsTab::revealFileInSystemFileManager(const int row)
+{
+    const QString absoluteFilePath = getAbsoluteFilePathForRow(row);
+
+    if (!absoluteFilePath.isEmpty())
+    {
+        emit revealFileInSystemFileManagerRequested(absoluteFilePath);
+    }
+}
+
+void ResultsTab::showResultContextMenu(const QPoint& position)
+{
+    const QModelIndex clickedIndex = ui->results_TableWidget->indexAt(position);
+
+    if (!clickedIndex.isValid())
+    {
+        return;
+    }
+
+    const QString absoluteFilePath = getAbsoluteFilePathForRow(clickedIndex.row());
+
+    if (absoluteFilePath.isEmpty())
+    {
+        return;
+    }
+
+    ui->results_TableWidget->setCurrentIndex(clickedIndex);
+
+    QMenu contextMenu(ui->results_TableWidget);
+    QAction* revealFileInSystemFileManagerAction = contextMenu.addAction(tr("Reveal in file manager"));
+    QAction* copyFilePathAction = contextMenu.addAction(tr("Copy path"));
+    const QAction* selectedAction = contextMenu.exec(ui->results_TableWidget->viewport()->mapToGlobal(position));
+
+    if (selectedAction == revealFileInSystemFileManagerAction)
+    {
+        revealFileInSystemFileManager(clickedIndex.row());
+    }
+    else if (selectedAction == copyFilePathAction)
+    {
+        QApplication::clipboard()->setText(QDir::toNativeSeparators(absoluteFilePath));
+    }
 }
 
 void ResultsTab::showDuplicateGroups(const QList<DuplicateGroup>& duplicateGroups)

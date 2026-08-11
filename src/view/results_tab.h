@@ -26,6 +26,9 @@ public:
 private:
     void initializeTable();
     void initializeColumnWidths();
+    [[nodiscard]] QString getAbsoluteFilePathForRow(int row) const;
+    void revealFileInSystemFileManager(int row);
+    void showResultContextMenu(const QPoint& position);
     void sortResultGroups(int column, Qt::SortOrder sortOrder);
     void populateTable();
 
