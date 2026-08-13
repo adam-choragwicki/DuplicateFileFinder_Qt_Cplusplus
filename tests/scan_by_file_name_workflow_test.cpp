@@ -6,6 +6,12 @@
 #include <stop_token>
 #include <variant>
 
+namespace
+{
+    class ScanByFileNameTest : public ScanWorkflowTest
+    {};
+}
+
 /// Verifies that scanning the smoke-test file system scenario tree by file name returns the two expected duplicate groups and a file-name scan summary.
 TEST_F(ScanByFileNameTest, CheckDuplicateGroups_SmokeTest)
 {
@@ -225,80 +231,30 @@ TEST_F(ScanByFileNameTest, CheckSummaryMetrics_ControlledDirectoryTree)
     EXPECT_EQ(summary->getTotalBytesOccupiedByFilesInDuplicateGroups(), expectedDuplicateBytes);
 }
 
-/// Verifies that scanning an empty directory produces a no-files-found outcome.
-TEST_F(ScanByFileNameTest, CheckNoFilesOutcome_EmptyDirectory)
-{
-    const ScanResult scanResult = FileNameScanWorkflow().execute(QStringList{getTemporaryScanRootPath()},
-                                                                 std::stop_source().get_token(),
-                                                                 ignoreProgressCallback);
-
-    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::NoFilesFound);
-    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
-}
-
-/// Verifies that a file-name scan returns a cancelled outcome when stopping is requested before the scan begins.
-TEST_F(ScanByFileNameTest, CheckCancelledOutcome_StopRequestedBeforeScan)
-{
-    std::stop_source stopSource;
-    stopSource.request_stop();
-
-    const ScanResult scanResult = FileNameScanWorkflow().execute(QStringList{getTemporaryScanRootPath()},
-                                                                 stopSource.get_token(),
-                                                                 ignoreProgressCallback);
-
-    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Cancelled);
-    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
-}
-
-/// Verifies that scanning a nonexistent root directory produces a failed outcome.
-TEST_F(ScanByFileNameTest, CheckFailedOutcome_RootDirectoryDoesNotExist)
-{
-    const ScanResult scanResult = FileNameScanWorkflow().execute(QStringList{QDir(getTemporaryScanRootPath()).filePath("missing")},
-                                                                 std::stop_source().get_token(),
-                                                                 ignoreProgressCallback);
-
-    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Failed);
-    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
-}
-
-/// Verifies that scanning one unique file completes successfully without duplicate groups.
-TEST_F(ScanByFileNameTest, CheckCompletedWithoutDuplicatesOutcome_DirectoryContainsOneUniqueFile)
-{
-    ASSERT_TRUE(writeFile("only-file", "unique"));
-
-    const ScanResult scanResult = FileNameScanWorkflow().execute(QStringList{getTemporaryScanRootPath()},
-                                                                 std::stop_source().get_token(),
-                                                                 ignoreProgressCallback);
-
-    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithoutDuplicates);
-    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
-}
-
 /// Verifies that an active file-name scan can be cancelled after it has started enumerating files.
 TEST_F(ScanByFileNameTest, CheckCancelledOutcome_StopRequestedDuringFileEnumeration)
 {
-    // Give the workflow enough input to enter file enumeration and still have work remaining after reporting the first file.
     ASSERT_TRUE(writeFile("first.txt", "first file contents"));
     ASSERT_TRUE(writeFile("second.txt", "second file contents"));
 
     std::stop_source stopSource;
-    // This flag prevents repeated requests and later proves that cancellation was requested from inside the active scan.
     bool stopWasRequestedAfterFirstFile = false;
 
     const ScanResult scanResult = FileNameScanWorkflow().execute(QStringList{getTemporaryScanRootPath()},
                                                                  stopSource.get_token(),
                                                                  [&stopSource, &stopWasRequestedAfterFirstFile](const ScanProgress& scanProgress)
                                                                  {
-                                                                     const auto* fileNameScanPhase = std::get_if<FileNameScanPhase>(&scanProgress.scanPhase);
+                                                                     const auto* phase = std::get_if<FileNameScanPhase>(&scanProgress.scanPhase);
 
-                                                                     // Waiting for the first processed file distinguishes in-progress cancellation from cancellation before execution.
-                                                                     if (!stopWasRequestedAfterFirstFile && fileNameScanPhase && *fileNameScanPhase == FileNameScanPhase::EnumeratingFiles && scanProgress.processedFilesCount == 1)
+                                                                     if (!stopWasRequestedAfterFirstFile
+                                                                         && phase
+                                                                         && *phase == FileNameScanPhase::EnumeratingFiles
+                                                                         && scanProgress.processedFilesCount == 1)
                                                                      {
                                                                          stopWasRequestedAfterFirstFile = stopSource.request_stop();
                                                                      }
                                                                  });
 
-    // Check both sides of the interaction: the callback issued the request and the workflow honored it.
     EXPECT_TRUE(stopWasRequestedAfterFirstFile);
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Cancelled);
     EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());

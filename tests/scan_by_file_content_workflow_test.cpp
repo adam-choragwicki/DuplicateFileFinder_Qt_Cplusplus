@@ -11,6 +11,12 @@
 #include <stop_token>
 #include <variant>
 
+namespace
+{
+    class ScanByFileContentTest : public ScanWorkflowTest
+    {};
+}
+
 /// Verifies that scanning the smoke-test file system scenario tree by file content returns files with identical content and reports the expected recoverable bytes.
 TEST_F(ScanByFileContentTest, CheckDuplicateGroups_SmokeTest)
 {
@@ -50,14 +56,12 @@ TEST_F(ScanByFileContentTest, CheckProgressPhases_SuccessfulScan)
 
     ASSERT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
     EXPECT_TRUE(containsOnlyPhasesFor<FileContentScanPhase>(progressUpdates));
-    EXPECT_EQ(
-        getPhaseTransitions<FileContentScanPhase>(progressUpdates),
-        (QList<FileContentScanPhase>{
-            FileContentScanPhase::EnumeratingFiles,
-            FileContentScanPhase::IdentifyingEqualSizeCandidates,
-            FileContentScanPhase::HashingDuplicateCandidateFiles,
-            FileContentScanPhase::VerifyingMatchingHashCandidates,
-            FileContentScanPhase::BuildingScanResult}));
+    EXPECT_EQ(getPhaseTransitions<FileContentScanPhase>(progressUpdates), (QList<FileContentScanPhase>{
+                  FileContentScanPhase::EnumeratingFiles,
+                  FileContentScanPhase::IdentifyingEqualSizeCandidates,
+                  FileContentScanPhase::HashingDuplicateCandidateFiles,
+                  FileContentScanPhase::VerifyingMatchingHashCandidates,
+                  FileContentScanPhase::BuildingScanResult}));
 }
 
 /// Verifies that content-scan progress counters are monotonic within each phase and respect each phase's reported total.
@@ -164,55 +168,6 @@ TEST_F(ScanByFileContentTest, CheckSummaryMetrics_ControlledDirectoryTree)
     EXPECT_EQ(summary->getTotalFilesInDuplicateGroupsCount(), 2);
     EXPECT_EQ(summary->getTotalBytesOccupiedByFilesInDuplicateGroups(), expectedDuplicateBytes);
     EXPECT_EQ(summary->getTotalAmountOfPotentiallyRecoverableBytes(), static_cast<quint64>(duplicateContents.size()));
-}
-
-/// Verifies that scanning an empty directory produces a no-files-found outcome.
-TEST_F(ScanByFileContentTest, CheckNoFilesOutcome_EmptyDirectory)
-{
-    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{getTemporaryScanRootPath()},
-                                                                    std::stop_source().get_token(),
-                                                                    ignoreProgressCallback);
-
-    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::NoFilesFound);
-    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
-}
-
-/// Verifies that a file-content scan returns a cancelled outcome when stopping is requested before the scan begins.
-TEST_F(ScanByFileContentTest, CheckCancelledOutcome_StopRequestedBeforeScan)
-{
-    std::stop_source stopSource;
-    stopSource.request_stop();
-
-    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{getTemporaryScanRootPath()},
-                                                                    stopSource.get_token(),
-                                                                    ignoreProgressCallback);
-
-    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Cancelled);
-    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
-}
-
-/// Verifies that scanning a nonexistent root directory produces a failed outcome.
-TEST_F(ScanByFileContentTest, CheckFailedOutcome_RootDirectoryDoesNotExist)
-{
-    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{QDir(getTemporaryScanRootPath()).filePath("missing")},
-                                                                    std::stop_source().get_token(),
-                                                                    ignoreProgressCallback);
-
-    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Failed);
-    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
-}
-
-/// Verifies that scanning one unique file completes successfully without duplicate groups.
-TEST_F(ScanByFileContentTest, CheckCompletedWithoutDuplicatesOutcome_DirectoryContainsOneUniqueFile)
-{
-    ASSERT_TRUE(writeFile("only-file", "unique"));
-
-    const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{getTemporaryScanRootPath()},
-                                                                    std::stop_source().get_token(),
-                                                                    ignoreProgressCallback);
-
-    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithoutDuplicates);
-    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
 }
 
 /// Verifies that an active content scan can be cancelled after it has started enumerating files.

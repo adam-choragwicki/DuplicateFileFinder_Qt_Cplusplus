@@ -8,8 +8,9 @@ add_subdirectory(lib/googletest EXCLUDE_FROM_ALL)
 
 add_executable(scan_workflow_tests
         scan_test_fixtures.cpp scan_test_fixtures.h
-        scan_by_file_name_test.cpp
-        scan_by_file_content_test.cpp
+        shared_scan_workflow_test.cpp
+        scan_by_file_name_workflow_test.cpp
+        scan_by_file_content_workflow_test.cpp
         scan_summary_logger_test.cpp
 )
 

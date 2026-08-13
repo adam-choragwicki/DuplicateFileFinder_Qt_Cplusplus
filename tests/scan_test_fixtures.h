@@ -15,6 +15,7 @@
 #include <variant>
 #include <initializer_list>
 
+/// Common scan workflow test fixture
 class ScanWorkflowTest : public ::testing::Test
 {
 protected:
@@ -66,12 +67,6 @@ private:
 
     QTemporaryDir temporaryDirectory_;
 };
-
-class ScanByFileNameTest : public ScanWorkflowTest
-{};
-
-class ScanByFileContentTest : public ScanWorkflowTest
-{};
 
 class ScanSummaryLoggerTest : public ::testing::Test
 {
