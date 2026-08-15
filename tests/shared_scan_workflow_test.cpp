@@ -88,3 +88,185 @@ TYPED_TEST(SharedScanWorkflowTest, CheckCompletedWithoutDuplicatesOutcome_Direct
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithoutDuplicates);
     EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
 }
+
+/// Verifies that matching files from two separate scan roots form one duplicate group.
+TYPED_TEST(SharedScanWorkflowTest, CheckDuplicateGroup_FilesAreInDifferentRoots)
+{
+    ASSERT_TRUE(this->writeFile("first-root/shared.txt", "same"));
+    ASSERT_TRUE(this->writeFile("second-root/shared.log", "same"));
+
+    const QString firstRootPath = this->getTemporaryDirectoryPath("first-root");
+    const QString secondRootPath = this->getTemporaryDirectoryPath("second-root");
+    const DuplicateGroup expectedDuplicateGroup = this->createExpectedDuplicateGroup({
+        this->createExpectedFileRecord(firstRootPath, "shared.txt", 4),
+        this->createExpectedFileRecord(secondRootPath, "shared.log", 4)
+    });
+
+    const ScanResult scanResult = TypeParam().execute(QStringList{firstRootPath, secondRootPath},
+                                                      std::stop_source().get_token(),
+                                                      this->ignoreProgressCallback);
+
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
+    ASSERT_EQ(scanResult.getDuplicateGroups().size(), 1);
+    EXPECT_TRUE(this->containsDuplicateGroup(scanResult, expectedDuplicateGroup));
+}
+
+/// Verifies that one scan across three roots finds two independent cross-root duplicate groups:
+///
+/// first-root/alpha.txt  <->  second-root/alpha.log
+/// second-root/beta.bin <->  third-root/beta.txt
+///
+/// The unrelated file in third-root must not be included in either group.
+TYPED_TEST(SharedScanWorkflowTest, CheckDuplicateGroup_DuplicateGroupsSpreadAcrossSeveralRoots)
+{
+    ASSERT_TRUE(this->writeFile("first-root/alpha.txt", "alpha"));
+    ASSERT_TRUE(this->writeFile("second-root/alpha.log", "alpha"));
+    ASSERT_TRUE(this->writeFile("second-root/beta.bin", "beta"));
+    ASSERT_TRUE(this->writeFile("third-root/beta.txt", "beta"));
+    ASSERT_TRUE(this->writeFile("third-root/unique", "unique"));
+
+    const QString firstRootPath = this->getTemporaryDirectoryPath("first-root");
+    const QString secondRootPath = this->getTemporaryDirectoryPath("second-root");
+    const QString thirdRootPath = this->getTemporaryDirectoryPath("third-root");
+
+    const DuplicateGroup expectedAlphaGroup = this->createExpectedDuplicateGroup({
+        this->createExpectedFileRecord(firstRootPath, "alpha.txt", 5),
+        this->createExpectedFileRecord(secondRootPath, "alpha.log", 5)
+    });
+
+    const DuplicateGroup expectedBetaGroup = this->createExpectedDuplicateGroup({
+        this->createExpectedFileRecord(secondRootPath, "beta.bin", 4),
+        this->createExpectedFileRecord(thirdRootPath, "beta.txt", 4)
+    });
+
+    const ScanResult scanResult = TypeParam().execute(QStringList{firstRootPath, secondRootPath, thirdRootPath},
+                                                      std::stop_source().get_token(),
+                                                      this->ignoreProgressCallback);
+
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
+    ASSERT_EQ(scanResult.getDuplicateGroups().size(), 2);
+    EXPECT_TRUE(this->containsDuplicateGroup(scanResult, expectedAlphaGroup));
+    EXPECT_TRUE(this->containsDuplicateGroup(scanResult, expectedBetaGroup));
+}
+
+/// Verifies that an empty root does not prevent files in a later root from being scanned.
+TYPED_TEST(SharedScanWorkflowTest, CheckCompletedWithoutDuplicatesOutcome_EmptyRootBeforeNonEmptyRoot)
+{
+    ASSERT_TRUE(this->createDirectory("empty-root"));
+    ASSERT_TRUE(this->writeFile("non-empty-root/only-file", "unique"));
+
+    const QStringList rootPaths{
+        this->getTemporaryDirectoryPath("empty-root"),
+        this->getTemporaryDirectoryPath("non-empty-root")
+    };
+
+    const ScanResult scanResult = TypeParam().execute(rootPaths,
+                                                      std::stop_source().get_token(),
+                                                      this->ignoreProgressCallback);
+
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithoutDuplicates);
+    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
+}
+
+/// Verifies that the first root is enumerated before an invalid second root causes the scan to fail.
+TYPED_TEST(SharedScanWorkflowTest, CheckFailedOutcome_InvalidSecondRootAfterFirstRootEnumerated)
+{
+    ASSERT_TRUE(this->writeFile("valid-root/enumerated-file", "contents"));
+
+    bool firstRootFileWasEnumerated = false;
+
+    const QStringList rootPaths{
+        this->getTemporaryDirectoryPath("valid-root"),
+        this->getTemporaryDirectoryPath("missing-root")
+    };
+
+    const ScanResult scanResult = TypeParam().execute(rootPaths,
+                                                      std::stop_source().get_token(),
+                                                      [&firstRootFileWasEnumerated](const ScanProgress& scanProgress)
+                                                      {
+                                                          if (!scanProgress.totalFilesCount.has_value()
+                                                              && scanProgress.processedFilesCount == 1)
+                                                          {
+                                                              firstRootFileWasEnumerated = true;
+                                                          }
+                                                      });
+
+    EXPECT_TRUE(firstRootFileWasEnumerated);
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Failed);
+    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
+}
+
+/// Verifies that a scan can be cancelled after enumeration has advanced from the first root into the second root.
+TYPED_TEST(SharedScanWorkflowTest, CheckCancelledOutcome_StopRequestedWhileEnumeratingSecondRoot)
+{
+    ASSERT_TRUE(this->writeFile("first-root/only-file", "first"));
+    ASSERT_TRUE(this->writeFile("second-root/first-file", "second"));
+    ASSERT_TRUE(this->writeFile("second-root/second-file", "third"));
+
+    std::stop_source stopSource;
+    bool stopWasRequestedInSecondRoot = false;
+    const QStringList rootPaths{
+        this->getTemporaryDirectoryPath("first-root"),
+        this->getTemporaryDirectoryPath("second-root")
+    };
+
+    const ScanResult scanResult = TypeParam().execute(rootPaths,
+                                                      stopSource.get_token(),
+                                                      [&stopSource, &stopWasRequestedInSecondRoot](const ScanProgress& scanProgress)
+                                                      {
+                                                          if (!stopWasRequestedInSecondRoot
+                                                              && !scanProgress.totalFilesCount.has_value()
+                                                              && scanProgress.processedFilesCount == 2)
+                                                          {
+                                                              stopWasRequestedInSecondRoot = stopSource.request_stop();
+                                                          }
+                                                      });
+
+    EXPECT_TRUE(stopWasRequestedInSecondRoot);
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Cancelled);
+    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
+}
+
+/// Verifies that invoking a workflow without any root directories fails cleanly.
+TYPED_TEST(SharedScanWorkflowTest, CheckFailedOutcome_EmptyRootList)
+{
+    const ScanResult scanResult = TypeParam().execute({},
+                                                      std::stop_source().get_token(),
+                                                      this->ignoreProgressCallback);
+
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Failed);
+    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
+}
+
+/// Verifies that repeated and nested roots passed directly to a workflow do not scan any file more than once.
+/// This is tested by recording the final enumeration progress count and requiring it to equal the two distinct
+/// files in parent-root, despite passing parent-root twice and its nested-root separately.
+TYPED_TEST(SharedScanWorkflowTest, CheckFilesScannedOnce_RepeatedAndNestedRoots)
+{
+    ASSERT_TRUE(this->writeFile("parent-root/top-level-file", "top"));
+    ASSERT_TRUE(this->writeFile("parent-root/nested-root/nested-file", "nested"));
+
+    const QString parentRootPath = this->getTemporaryDirectoryPath("parent-root");
+    const QString nestedRootPath = this->getTemporaryDirectoryPath("parent-root/nested-root");
+
+    const QStringList rootPaths{
+        nestedRootPath,
+        parentRootPath,
+        parentRootPath // parentRootPath is repeated
+    };
+
+    quint64 lastEnumeratedFilesCount = 0;
+    const ScanResult scanResult = TypeParam().execute(rootPaths,
+                                                      std::stop_source().get_token(),
+                                                      [&lastEnumeratedFilesCount](const ScanProgress& scanProgress)
+                                                      {
+                                                          if (!scanProgress.totalFilesCount.has_value())
+                                                          {
+                                                              lastEnumeratedFilesCount = scanProgress.processedFilesCount;
+                                                          }
+                                                      });
+
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithoutDuplicates);
+    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
+    EXPECT_EQ(lastEnumeratedFilesCount, 2);
+}

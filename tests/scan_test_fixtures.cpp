@@ -15,9 +15,14 @@ void ScanWorkflowTest::SetUp()
     ASSERT_TRUE(temporaryDirectory_.isValid());
 }
 
+bool ScanWorkflowTest::createDirectory(const QString& relativePath) const
+{
+    return QDir().mkpath(getTemporaryDirectoryPath(relativePath));
+}
+
 bool ScanWorkflowTest::writeFile(const QString& relativePath, const QByteArray& contents) const
 {
-    const QString absolutePath = temporaryDirectory_.filePath(relativePath);
+    const QString absolutePath = getTemporaryDirectoryPath(relativePath);
 
     if (!QDir().mkpath(QFileInfo(absolutePath).absolutePath()))
     {
@@ -32,6 +37,11 @@ bool ScanWorkflowTest::writeFile(const QString& relativePath, const QByteArray& 
     }
 
     return file.write(contents) == contents.size();
+}
+
+QString ScanWorkflowTest::getTemporaryDirectoryPath(const QString& relativePath) const
+{
+    return temporaryDirectory_.filePath(relativePath);
 }
 
 QString ScanWorkflowTest::getTemporaryScanRootPath() const

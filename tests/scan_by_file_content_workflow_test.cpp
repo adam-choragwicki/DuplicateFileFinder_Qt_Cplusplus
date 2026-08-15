@@ -140,6 +140,90 @@ TEST_F(ScanByFileContentTest, CheckProgressCounters_SuccessfulScan)
     EXPECT_TRUE(buildingResultPhaseWasReported);
 }
 
+/// Verifies that content-scan progress aggregates files from all roots instead of restarting at each new root.
+/// The first root contains 2 files and the second contains 3, so the test requires the exact enumeration sequence
+/// 0, 1, 2, 3, 4, 5 and an equal-size-check total ending at 5. The two 4-byte "same" files are the only candidates,
+/// so hashing and verification must each use a total ending at 2; all phase counts must be nondecreasing, and the
+/// final result update must report 5/5.
+TEST_F(ScanByFileContentTest, CheckProgressCounters_MultipleRoots)
+{
+    ASSERT_TRUE(writeFile("first-root/shared.txt", "same"));
+    ASSERT_TRUE(writeFile("first-root/first-only", "a"));
+    ASSERT_TRUE(writeFile("second-root/shared.log", "same"));
+    ASSERT_TRUE(writeFile("second-root/second-only", "bb"));
+    ASSERT_TRUE(writeFile("second-root/third-only", "ccc"));
+
+    QList<ScanProgress> progressUpdates;
+    const QStringList rootPaths{
+        getTemporaryDirectoryPath("first-root"),
+        getTemporaryDirectoryPath("second-root")
+    };
+    const ScanResult scanResult = FileContentScanWorkflow().execute(rootPaths,
+                                                                    std::stop_source().get_token(),
+                                                                    [&progressUpdates](const ScanProgress& scanProgress)
+                                                                    {
+                                                                        progressUpdates.append(scanProgress);
+                                                                    });
+
+    ASSERT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
+
+    constexpr quint64 expectedFilesCount = 5;
+    constexpr quint64 expectedCandidateFilesCount = 2;
+    QList<quint64> enumerationCounts;
+    quint64 lastSizeCheckedFilesCount = 0;
+    quint64 lastHashedFilesCount = 0;
+    quint64 lastVerifiedFilesCount = 0;
+    bool buildingResultPhaseWasReported = false;
+
+    for (const ScanProgress& scanProgress: progressUpdates)
+    {
+        const auto* phase = std::get_if<FileContentScanPhase>(&scanProgress.scanPhase);
+        ASSERT_NE(phase, nullptr);
+
+        if (*phase == FileContentScanPhase::EnumeratingFiles)
+        {
+            EXPECT_FALSE(scanProgress.totalFilesCount.has_value());
+            enumerationCounts.append(scanProgress.processedFilesCount);
+        }
+        else if (*phase == FileContentScanPhase::IdentifyingEqualSizeCandidates)
+        {
+            ASSERT_TRUE(scanProgress.totalFilesCount.has_value());
+            EXPECT_EQ(*scanProgress.totalFilesCount, expectedFilesCount);
+            EXPECT_GE(scanProgress.processedFilesCount, lastSizeCheckedFilesCount);
+            EXPECT_LE(scanProgress.processedFilesCount, expectedFilesCount);
+            lastSizeCheckedFilesCount = scanProgress.processedFilesCount;
+        }
+        else if (*phase == FileContentScanPhase::HashingDuplicateCandidateFiles)
+        {
+            ASSERT_TRUE(scanProgress.totalFilesCount.has_value());
+            EXPECT_EQ(*scanProgress.totalFilesCount, expectedCandidateFilesCount);
+            EXPECT_GE(scanProgress.processedFilesCount, lastHashedFilesCount);
+            EXPECT_LE(scanProgress.processedFilesCount, expectedCandidateFilesCount);
+            lastHashedFilesCount = scanProgress.processedFilesCount;
+        }
+        else if (*phase == FileContentScanPhase::VerifyingMatchingHashCandidates)
+        {
+            ASSERT_TRUE(scanProgress.totalFilesCount.has_value());
+            EXPECT_EQ(*scanProgress.totalFilesCount, expectedCandidateFilesCount);
+            EXPECT_GE(scanProgress.processedFilesCount, lastVerifiedFilesCount);
+            EXPECT_LE(scanProgress.processedFilesCount, expectedCandidateFilesCount);
+            lastVerifiedFilesCount = scanProgress.processedFilesCount;
+        }
+        else if (*phase == FileContentScanPhase::BuildingScanResult)
+        {
+            EXPECT_EQ(scanProgress.processedFilesCount, expectedFilesCount);
+            EXPECT_EQ(scanProgress.totalFilesCount, expectedFilesCount);
+            buildingResultPhaseWasReported = true;
+        }
+    }
+
+    EXPECT_EQ(enumerationCounts, (QList<quint64>{0, 1, 2, 3, 4, 5}));
+    EXPECT_EQ(lastSizeCheckedFilesCount, expectedFilesCount);
+    EXPECT_EQ(lastHashedFilesCount, expectedCandidateFilesCount);
+    EXPECT_EQ(lastVerifiedFilesCount, expectedCandidateFilesCount);
+    EXPECT_TRUE(buildingResultPhaseWasReported);
+}
+
 /// Verifies the exact file, directory, byte, duplicate, and recoverable-byte metrics for a controlled directory tree.
 TEST_F(ScanByFileContentTest, CheckSummaryMetrics_ControlledDirectoryTree)
 {
@@ -168,6 +252,38 @@ TEST_F(ScanByFileContentTest, CheckSummaryMetrics_ControlledDirectoryTree)
     EXPECT_EQ(summary->getTotalFilesInDuplicateGroupsCount(), 2);
     EXPECT_EQ(summary->getTotalBytesOccupiedByFilesInDuplicateGroups(), expectedDuplicateBytes);
     EXPECT_EQ(summary->getTotalAmountOfPotentiallyRecoverableBytes(), static_cast<quint64>(duplicateContents.size()));
+}
+
+/// Verifies that content-scan summary metrics combine directory, file, byte, duplicate, and recoverable totals from all roots.
+/// The two roots and their nested and deep subdirectories make 4 scanned directories; their 4 files occupy 4 + 3 + 4 + 5 = 16 bytes.
+/// shared.txt and shared.log form 1 duplicate group containing 2 files, whose two 4-byte contents occupy 8 bytes in total.
+/// Removing either duplicate would recover 4 bytes.
+TEST_F(ScanByFileContentTest, CheckSummaryMetrics_MultipleRoots)
+{
+    ASSERT_TRUE(writeFile("first-root/nested/shared.txt", "same"));
+    ASSERT_TRUE(writeFile("first-root/unique-one", "one"));
+    ASSERT_TRUE(writeFile("second-root/shared.log", "same"));
+    ASSERT_TRUE(writeFile("second-root/deep/unique-two", "12345"));
+
+    const QStringList rootPaths{
+        getTemporaryDirectoryPath("first-root"),
+        getTemporaryDirectoryPath("second-root")
+    };
+    const ScanResult scanResult = FileContentScanWorkflow().execute(rootPaths,
+                                                                    std::stop_source().get_token(),
+                                                                    ignoreProgressCallback);
+
+    ASSERT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
+    const auto* summary = std::get_if<FileContentScanSummary>(&scanResult.getScanSummaryDetails());
+    ASSERT_NE(summary, nullptr);
+
+    EXPECT_EQ(summary->getScannedDirectoriesCount(), 4);
+    EXPECT_EQ(summary->getScannedFilesCount(), 4);
+    EXPECT_EQ(summary->getTotalScannedBytes(), 16);
+    EXPECT_EQ(summary->getDuplicateGroupsCount(), 1);
+    EXPECT_EQ(summary->getTotalFilesInDuplicateGroupsCount(), 2);
+    EXPECT_EQ(summary->getTotalBytesOccupiedByFilesInDuplicateGroups(), 8);
+    EXPECT_EQ(summary->getTotalAmountOfPotentiallyRecoverableBytes(), 4);
 }
 
 /// Verifies that an active content scan can be cancelled after it has started enumerating files.

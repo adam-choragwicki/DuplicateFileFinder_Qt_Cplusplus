@@ -21,7 +21,9 @@ class ScanWorkflowTest : public ::testing::Test
 protected:
     void SetUp() override;
 
+    [[nodiscard]] bool createDirectory(const QString& relativePath) const;
     [[nodiscard]] bool writeFile(const QString& relativePath, const QByteArray& contents) const;
+    [[nodiscard]] QString getTemporaryDirectoryPath(const QString& relativePath) const;
     [[nodiscard]] QString getTemporaryScanRootPath() const;
 
     [[nodiscard]] static QString getSmokeTestScanRootPath();

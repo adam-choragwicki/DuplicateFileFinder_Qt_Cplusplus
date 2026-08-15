@@ -1,7 +1,89 @@
 #include "file_collector.h"
 
+#include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
+
+Qt::CaseSensitivity FileCollector::pathCaseSensitivity()
+{
+#if defined(Q_OS_WIN)
+    return Qt::CaseInsensitive;
+#else
+    return Qt::CaseSensitive;
+#endif
+}
+
+bool FileCollector::isProperSubdirectoryOf(const QString& directoryPath, const QString& possibleParentPath)
+{
+    QString parentPathPrefix = possibleParentPath;
+
+    if (!parentPathPrefix.endsWith('/'))
+    {
+        parentPathPrefix.append('/');
+    }
+
+    return directoryPath.startsWith(parentPathPrefix, pathCaseSensitivity());
+}
+
+QStringList FileCollector::getNonOverlappingRootDirectoryPaths(const QStringList& rootDirectoryPaths)
+{
+    QList<RootDirectory> rootDirectories;
+    rootDirectories.reserve(rootDirectoryPaths.size());
+
+    for (const QString& rootDirectoryPath: rootDirectoryPaths)
+    {
+        const QFileInfo rootDirectoryInfo(rootDirectoryPath);
+        const bool isValid = rootDirectoryInfo.exists()
+                             && rootDirectoryInfo.isDir()
+                             && rootDirectoryInfo.isReadable();
+        const QString normalizedPath = isValid
+                                           ? QDir::fromNativeSeparators(rootDirectoryInfo.canonicalFilePath())
+                                           : QString{};
+
+        rootDirectories.append({rootDirectoryPath, normalizedPath, isValid});
+    }
+
+    QStringList nonOverlappingPaths;
+
+    for (qsizetype rootIndex = 0; rootIndex < rootDirectories.size(); ++rootIndex)
+    {
+        const RootDirectory& rootDirectory = rootDirectories.at(rootIndex);
+
+        if (!rootDirectory.isValid)
+        {
+            // Invalid roots must still reach collection so the workflow reports a failure at their input position.
+            nonOverlappingPaths.append(rootDirectory.originalPath);
+            continue;
+        }
+
+        bool isCoveredByAnotherRoot = false;
+
+        for (qsizetype otherRootIndex = 0; otherRootIndex < rootDirectories.size(); ++otherRootIndex)
+        {
+            if (rootIndex == otherRootIndex || !rootDirectories.at(otherRootIndex).isValid)
+            {
+                continue;
+            }
+
+            const QString& otherRootPath = rootDirectories.at(otherRootIndex).normalizedPath;
+            const bool isRepeatedRoot = rootDirectory.normalizedPath.compare(otherRootPath, pathCaseSensitivity()) == 0;
+
+            if ((isRepeatedRoot && otherRootIndex < rootIndex)
+                || isProperSubdirectoryOf(rootDirectory.normalizedPath, otherRootPath))
+            {
+                isCoveredByAnotherRoot = true;
+                break;
+            }
+        }
+
+        if (!isCoveredByAnotherRoot)
+        {
+            nonOverlappingPaths.append(rootDirectory.originalPath);
+        }
+    }
+
+    return nonOverlappingPaths;
+}
 
 FileCollectionResult FileCollector::collectRecursively(const QStringList& rootDirectoryPaths, const std::stop_token& stopToken, const FileVisitor& fileVisitor)
 {
@@ -18,7 +100,9 @@ FileCollectionResult FileCollector::collectRecursively(const QStringList& rootDi
         return {FileCollectionStatus::InvalidRootDirectory, combinedMetrics};
     }
 
-    for (const QString& rootDirectoryPath: rootDirectoryPaths)
+    const QStringList nonOverlappingRootDirectoryPaths = getNonOverlappingRootDirectoryPaths(rootDirectoryPaths);
+
+    for (const QString& rootDirectoryPath: nonOverlappingRootDirectoryPaths)
     {
         const FileCollectionResult rootCollectionResult = collectSingleRootRecursively(rootDirectoryPath, stopToken, fileVisitor);
         combinedMetrics.mergeFileCollectionMetrics(rootCollectionResult.getMetrics());

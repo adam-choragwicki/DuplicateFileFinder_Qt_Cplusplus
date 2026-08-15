@@ -202,6 +202,68 @@ TEST_F(ScanByFileNameTest, CheckProgressCounters_SuccessfulScan)
     EXPECT_TRUE(buildingResultPhaseWasReported);
 }
 
+/// Verifies that file-name scan progress counters remain cumulative while enumeration advances across multiple roots.
+/// Cumulative means that the processed-files count continues from the first root's 2 files while the second
+/// root's 3 files are enumerated, rather than restarting at 0.
+/// The test requires the exact enumeration sequence 0, 1, 2, 3, 4, 5, nondecreasing grouping counts bounded by the total of five, and a final result update of 5/5.
+TEST_F(ScanByFileNameTest, CheckProgressCounters_MultipleRoots)
+{
+    ASSERT_TRUE(writeFile("first-root/shared.txt", "same"));
+    ASSERT_TRUE(writeFile("first-root/first-only", "a"));
+    ASSERT_TRUE(writeFile("second-root/shared.log", "same"));
+    ASSERT_TRUE(writeFile("second-root/second-only", "bb"));
+    ASSERT_TRUE(writeFile("second-root/third-only", "ccc"));
+
+    QList<ScanProgress> progressUpdates;
+    const QStringList rootPaths{
+        getTemporaryDirectoryPath("first-root"),
+        getTemporaryDirectoryPath("second-root")
+    };
+    const ScanResult scanResult = FileNameScanWorkflow().execute(rootPaths,
+                                                                 std::stop_source().get_token(),
+                                                                 [&progressUpdates](const ScanProgress& scanProgress)
+                                                                 {
+                                                                     progressUpdates.append(scanProgress);
+                                                                 });
+
+    ASSERT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
+
+    constexpr quint64 expectedFilesCount = 5;
+    QList<quint64> enumerationCounts;
+    quint64 lastGroupedFilesCount = 0;
+    bool buildingResultPhaseWasReported = false;
+
+    for (const ScanProgress& scanProgress: progressUpdates)
+    {
+        const auto* phase = std::get_if<FileNameScanPhase>(&scanProgress.scanPhase);
+        ASSERT_NE(phase, nullptr);
+
+        if (*phase == FileNameScanPhase::EnumeratingFiles)
+        {
+            EXPECT_FALSE(scanProgress.totalFilesCount.has_value());
+            enumerationCounts.append(scanProgress.processedFilesCount);
+        }
+        else if (*phase == FileNameScanPhase::GroupingFilesByName)
+        {
+            ASSERT_TRUE(scanProgress.totalFilesCount.has_value());
+            EXPECT_EQ(*scanProgress.totalFilesCount, expectedFilesCount);
+            EXPECT_GE(scanProgress.processedFilesCount, lastGroupedFilesCount);
+            EXPECT_LE(scanProgress.processedFilesCount, expectedFilesCount);
+            lastGroupedFilesCount = scanProgress.processedFilesCount;
+        }
+        else if (*phase == FileNameScanPhase::BuildingScanResult)
+        {
+            EXPECT_EQ(scanProgress.processedFilesCount, expectedFilesCount);
+            EXPECT_EQ(scanProgress.totalFilesCount, expectedFilesCount);
+            buildingResultPhaseWasReported = true;
+        }
+    }
+
+    EXPECT_EQ(enumerationCounts, (QList<quint64>{0, 1, 2, 3, 4, 5}));
+    EXPECT_EQ(lastGroupedFilesCount, expectedFilesCount);
+    EXPECT_TRUE(buildingResultPhaseWasReported);
+}
+
 /// Verifies the exact file, directory, byte, and duplicate metrics reported for a controlled nested directory tree.
 TEST_F(ScanByFileNameTest, CheckSummaryMetrics_ControlledDirectoryTree)
 {
@@ -229,6 +291,36 @@ TEST_F(ScanByFileNameTest, CheckSummaryMetrics_ControlledDirectoryTree)
     EXPECT_EQ(summary->getDuplicateGroupsCount(), 1);
     EXPECT_EQ(summary->getTotalFilesInDuplicateGroupsCount(), 2);
     EXPECT_EQ(summary->getTotalBytesOccupiedByFilesInDuplicateGroups(), expectedDuplicateBytes);
+}
+
+/// Verifies that file-name summary metrics combine directory, file, byte, and duplicate totals from all roots.
+/// The two roots and their nested and deep subdirectories make 4 scanned directories; their 4 files occupy 4 + 3 + 4 + 5 = 16 bytes.
+/// shared.txt and shared.log form 1 duplicate group containing 2 files, whose two 4-byte contents occupy 8 bytes in total.
+TEST_F(ScanByFileNameTest, CheckSummaryMetrics_MultipleRoots)
+{
+    ASSERT_TRUE(writeFile("first-root/nested/shared.txt", "same"));
+    ASSERT_TRUE(writeFile("first-root/unique-one", "one"));
+    ASSERT_TRUE(writeFile("second-root/shared.log", "same"));
+    ASSERT_TRUE(writeFile("second-root/deep/unique-two", "12345"));
+
+    const QStringList rootPaths{
+        getTemporaryDirectoryPath("first-root"),
+        getTemporaryDirectoryPath("second-root")
+    };
+    const ScanResult scanResult = FileNameScanWorkflow().execute(rootPaths,
+                                                                 std::stop_source().get_token(),
+                                                                 ignoreProgressCallback);
+
+    ASSERT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
+    const auto* summary = std::get_if<FileNameScanSummary>(&scanResult.getScanSummaryDetails());
+    ASSERT_NE(summary, nullptr);
+
+    EXPECT_EQ(summary->getScannedDirectoriesCount(), 4);
+    EXPECT_EQ(summary->getScannedFilesCount(), 4);
+    EXPECT_EQ(summary->getTotalScannedBytes(), 16);
+    EXPECT_EQ(summary->getDuplicateGroupsCount(), 1);
+    EXPECT_EQ(summary->getTotalFilesInDuplicateGroupsCount(), 2);
+    EXPECT_EQ(summary->getTotalBytesOccupiedByFilesInDuplicateGroups(), 8);
 }
 
 /// Verifies that an active file-name scan can be cancelled after it has started enumerating files.

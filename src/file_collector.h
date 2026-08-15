@@ -68,5 +68,15 @@ public:
     [[nodiscard]] static FileCollectionResult collectRecursively(const QStringList& rootDirectoryPaths, const std::stop_token& stopToken, const FileVisitor& fileVisitor);
 
 private:
+    struct RootDirectory
+    {
+        QString originalPath;
+        QString normalizedPath;
+        bool isValid;
+    };
+
+    [[nodiscard]] static Qt::CaseSensitivity pathCaseSensitivity();
+    [[nodiscard]] static bool isProperSubdirectoryOf(const QString& directoryPath, const QString& possibleParentPath);
+    [[nodiscard]] static QStringList getNonOverlappingRootDirectoryPaths(const QStringList& rootDirectoryPaths);
     [[nodiscard]] static FileCollectionResult collectSingleRootRecursively(const QString& rootDirectoryPath, const std::stop_token& stopToken, const FileVisitor& fileVisitor);
 };
