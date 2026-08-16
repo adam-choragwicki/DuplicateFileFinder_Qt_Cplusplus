@@ -165,9 +165,29 @@ FileCollectionResult FileCollector::collectSingleRootRecursively(const QString& 
             continue;
         }
 
+        QFile inputFile(fileInfo.absoluteFilePath());
+
+        if (!inputFile.open(QIODevice::ReadOnly))
+        {
+            metrics.incrementProblematicFilesCount();
+            qWarning() << "Skipping file that cannot be opened for reading:" << inputFile.fileName() << '-'
+                       << inputFile.errorString();
+            continue;
+        }
+
+        const qint64 fileSizeBytes = inputFile.size();
+
+        if (fileSizeBytes < 0)
+        {
+            metrics.incrementProblematicFilesCount();
+            qWarning() << "Skipping file which size cannot be read:" << inputFile.fileName() << '-'
+                       << inputFile.errorString();
+            continue;
+        }
+
         metrics.incrementScannedFilesCount();
-        metrics.addToTotalScannedBytes(fileInfo.size());
-        fileVisitor(FileRecord{fileInfo.fileName(), fileInfo.absolutePath(), fileInfo.size()});
+        metrics.addToTotalScannedBytes(fileSizeBytes);
+        fileVisitor(FileRecord{fileInfo.fileName(), fileInfo.absolutePath(), fileSizeBytes});
     }
 
     return {FileCollectionStatus::Completed, metrics};

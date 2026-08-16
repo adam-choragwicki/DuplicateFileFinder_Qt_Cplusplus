@@ -13,11 +13,13 @@ class FileCollectionMetrics
 public:
     void incrementScannedDirectoriesCount() { ++scannedDirectoriesCount_; }
     void incrementScannedFilesCount() { ++scannedFilesCount_; }
+    void incrementProblematicFilesCount() { ++problematicFilesCount_; }
 
     void mergeFileCollectionMetrics(const FileCollectionMetrics& otherFileCollectionMetrics)
     {
         scannedDirectoriesCount_ += otherFileCollectionMetrics.scannedDirectoriesCount_;
         scannedFilesCount_ += otherFileCollectionMetrics.scannedFilesCount_;
+        problematicFilesCount_ += otherFileCollectionMetrics.problematicFilesCount_;
         totalScannedBytes_ += otherFileCollectionMetrics.totalScannedBytes_;
     }
 
@@ -31,11 +33,13 @@ public:
 
     [[nodiscard]] quint64 getScannedDirectoriesCount() const { return scannedDirectoriesCount_; }
     [[nodiscard]] quint64 getScannedFilesCount() const { return scannedFilesCount_; }
+    [[nodiscard]] quint64 getProblematicFilesCount() const { return problematicFilesCount_; }
     [[nodiscard]] quint64 getTotalScannedBytes() const { return totalScannedBytes_; }
 
 private:
     quint64 scannedDirectoriesCount_{};
     quint64 scannedFilesCount_{};
+    quint64 problematicFilesCount_{};
     quint64 totalScannedBytes_{};
 };
 
