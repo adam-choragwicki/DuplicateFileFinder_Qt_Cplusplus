@@ -230,6 +230,11 @@ void Controller::onScanOperationComplete(const ScanResult& scanResult)
 {
     closeScanProgressDialog();
 
+    const quint64 problematicFilesCount = scanResult.getProblematicFilesCount();
+    const bool completedWithProblems = problematicFilesCount > 0
+                                       && scanResult.getOutcome() != ScanOutcome::Failed
+                                       && scanResult.getOutcome() != ScanOutcome::Cancelled;
+
     switch (scanResult.getOutcome())
     {
         case ScanOutcome::CompletedWithDuplicates:
@@ -237,17 +242,23 @@ void Controller::onScanOperationComplete(const ScanResult& scanResult)
             break;
 
         case ScanOutcome::CompletedWithoutDuplicates:
-            QMessageBox::information(
-                &view_,
-                "Scan complete",
-                "The scan completed successfully. No duplicate files were found.");
+            if (!completedWithProblems)
+            {
+                QMessageBox::information(
+                    &view_,
+                    "Scan complete",
+                    "The scan completed successfully. No duplicate files were found.");
+            }
             break;
 
         case ScanOutcome::NoFilesFound:
-            QMessageBox::information(
-                &view_,
-                "No files found",
-                "The selected directory and its subdirectories contain no files.");
+            if (!completedWithProblems)
+            {
+                QMessageBox::information(
+                    &view_,
+                    "No files found",
+                    "The selected directory and its subdirectories contain no files.");
+            }
             break;
 
         case ScanOutcome::Failed:
@@ -259,6 +270,20 @@ void Controller::onScanOperationComplete(const ScanResult& scanResult)
 
         case ScanOutcome::Cancelled:
             break;
+    }
+
+    if (completedWithProblems)
+    {
+        const QString warningText = problematicFilesCount == 1
+                                        ? QStringLiteral("The scan completed, but 1 file could not be read and was skipped. "
+                                            "Results may be incomplete.\n\n"
+                                            "Check the application log for details.")
+                                        : QStringLiteral("The scan completed, but %1 files could not be read and were skipped. "
+                                            "Results may be incomplete.\n\n"
+                                            "Check the application log for details.")
+                                        .arg(problematicFilesCount);
+
+        QMessageBox::warning(&view_, "Scan completed with warnings", warningText);
     }
 }
 
