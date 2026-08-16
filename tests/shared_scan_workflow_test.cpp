@@ -1,4 +1,5 @@
 #include "scan_test_fixtures.h"
+#include "unreadable_file_scan_test_helpers.h"
 
 #include "file_content_scan_workflow.h"
 #include "file_name_scan_workflow.h"
@@ -269,4 +270,69 @@ TYPED_TEST(SharedScanWorkflowTest, CheckFilesScannedOnce_RepeatedAndNestedRoots)
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithoutDuplicates);
     EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
     EXPECT_EQ(lastEnumeratedFilesCount, 2);
+}
+
+/// Verifies that a file which is already unreadable when discovered is logged, counted, and ignored by both workflows.
+/// The readable file remains the only contributor to the scan's file and byte totals.
+TYPED_TEST(SharedScanWorkflowTest, CheckProblematicFileSkipped_FileUnreadableWhenDiscovered)
+{
+    ASSERT_TRUE(this->writeFile("readable-file", "readable"));
+    ASSERT_TRUE(this->writeFile("unreadable-file", "unreadable"));
+
+    const QString unreadableFilePath = this->getTemporaryDirectoryPath("unreadable-file");
+    const ScopedUnreadableFile unreadableFile(unreadableFilePath);
+
+    if (!unreadableFile.isUnreadable())
+    {
+        GTEST_SKIP() << "The current account can still read a file after its access was restricted";
+    }
+
+    const ScopedLogCapture logCapture;
+    const ScanResult scanResult = TypeParam().execute(QStringList{this->getTemporaryScanRootPath()},
+                                                      std::stop_source().get_token(),
+                                                      this->ignoreProgressCallback);
+
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithoutDuplicates);
+    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
+    EXPECT_EQ(scanResult.getProblematicFilesCount(), 1);
+    EXPECT_TRUE(logCapture.contains(unreadableFilePath));
+
+    std::visit(
+        [](const auto& summary)
+        {
+            EXPECT_EQ(summary.getScannedFilesCount(), 1);
+            EXPECT_EQ(summary.getTotalScannedBytes(), 8);
+        },
+        scanResult.getScanSummaryDetails());
+}
+
+/// Verifies that a directory containing only a discovery-time unreadable file behaves like a directory with no files,
+/// while the skipped file is still represented by the problematic-file summary count.
+TYPED_TEST(SharedScanWorkflowTest, CheckNoFilesOutcome_OnlyFileUnreadableWhenDiscovered)
+{
+    ASSERT_TRUE(this->writeFile("unreadable-file", "unreadable"));
+
+    const QString unreadableFilePath = this->getTemporaryDirectoryPath("unreadable-file");
+    const ScopedUnreadableFile unreadableFile(unreadableFilePath);
+
+    if (!unreadableFile.isUnreadable())
+    {
+        GTEST_SKIP() << "The current account can still read a file after its access was restricted";
+    }
+
+    const ScanResult scanResult = TypeParam().execute(QStringList{this->getTemporaryScanRootPath()},
+                                                      std::stop_source().get_token(),
+                                                      this->ignoreProgressCallback);
+
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::NoFilesFound);
+    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
+    EXPECT_EQ(scanResult.getProblematicFilesCount(), 1);
+
+    std::visit(
+        [](const auto& summary)
+        {
+            EXPECT_EQ(summary.getScannedFilesCount(), 0);
+            EXPECT_EQ(summary.getTotalScannedBytes(), 0);
+        },
+        scanResult.getScanSummaryDetails());
 }
