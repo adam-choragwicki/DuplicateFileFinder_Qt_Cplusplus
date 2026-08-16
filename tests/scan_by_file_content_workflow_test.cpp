@@ -557,6 +557,7 @@ TEST_F(ScanByFileContentTest, CheckFailedOutcome_CollectedCandidateRemovedBefore
     EXPECT_TRUE(removedHashCandidate);
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Failed);
     EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
+    EXPECT_EQ(scanResult.getProblematicFilesCount(), 0);
 }
 
 /// Verifies that losing a matching-hash candidate after hashing but before byte comparison causes the content scan to fail rather than report an unverified duplicate.
@@ -586,4 +587,5 @@ TEST_F(ScanByFileContentTest, CheckFailedOutcome_HashCandidateRemovedBeforeByteC
     EXPECT_TRUE(removedComparisonCandidate);
     EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Failed);
     EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
+    EXPECT_EQ(scanResult.getProblematicFilesCount(), 0);
 }

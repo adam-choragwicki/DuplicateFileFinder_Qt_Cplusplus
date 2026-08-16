@@ -29,6 +29,15 @@ public:
     [[nodiscard]] ScanOutcome getOutcome() const { return outcome_; }
     [[nodiscard]] bool isScanCancelled() const { return outcome_ == ScanOutcome::Cancelled; }
 
+    [[nodiscard]] quint64 getProblematicFilesCount() const
+    {
+        return std::visit([](const auto& summary)
+                          {
+                              return summary.getProblematicFilesCount();
+                          },
+                          scanSummaryDetails_);
+    }
+
     void setOutcome(const ScanOutcome outcomeValue) { outcome_ = outcomeValue; }
 
 private:
