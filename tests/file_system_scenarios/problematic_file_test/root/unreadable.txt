@@ -1,0 +1,1 @@
+This file becomes unreadable while the manual scenario is active.
