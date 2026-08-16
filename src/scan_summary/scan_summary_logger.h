@@ -135,6 +135,7 @@ inline void ScanSummaryLogger::logCommonFields(const ScanSummary& summary)
     qInfo().noquote() << "  Duration:" << formatDuration(summary.getDuration());
     qInfo() << "  Scanned directories:" << summary.getScannedDirectoriesCount();
     qInfo() << "  Scanned files:" << summary.getScannedFilesCount();
+    qInfo() << "  Problematic files skipped:" << summary.getProblematicFilesCount();
     qInfo() << "  Duplicate groups:" << summary.getDuplicateGroupsCount();
     qInfo() << "  Files in duplicate groups:" << summary.getTotalFilesInDuplicateGroupsCount();
     qInfo().noquote() << "  Disk space occupied by files in duplicate groups:" << formatByteCount(summary.getTotalBytesOccupiedByFilesInDuplicateGroups());

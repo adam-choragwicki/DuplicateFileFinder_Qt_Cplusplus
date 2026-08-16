@@ -15,6 +15,7 @@ public:
         const std::chrono::milliseconds duration,
         const quint64 scannedDirectoriesCount,
         const quint64 scannedFilesCount,
+        const quint64 problematicFilesCount,
         const quint64 totalScannedBytes,
         const quint64 duplicateGroupsCount,
         const quint64 totalFilesInDuplicateGroupsCount,
@@ -23,6 +24,7 @@ public:
           duration_(duration),
           scannedDirectoriesCount_(scannedDirectoriesCount),
           scannedFilesCount_(scannedFilesCount),
+          problematicFilesCount_(problematicFilesCount),
           totalScannedBytes_(totalScannedBytes),
           duplicateGroupsCount_(duplicateGroupsCount),
           totalFilesInDuplicateGroupsCount_(totalFilesInDuplicateGroupsCount),
@@ -33,6 +35,7 @@ public:
     [[nodiscard]] std::chrono::milliseconds getDuration() const { return duration_; }
     [[nodiscard]] quint64 getScannedDirectoriesCount() const { return scannedDirectoriesCount_; }
     [[nodiscard]] quint64 getScannedFilesCount() const { return scannedFilesCount_; }
+    [[nodiscard]] quint64 getProblematicFilesCount() const { return problematicFilesCount_; }
     [[nodiscard]] quint64 getTotalScannedBytes() const { return totalScannedBytes_; }
     [[nodiscard]] quint64 getDuplicateGroupsCount() const { return duplicateGroupsCount_; }
     [[nodiscard]] quint64 getTotalFilesInDuplicateGroupsCount() const { return totalFilesInDuplicateGroupsCount_; }
@@ -43,6 +46,7 @@ private:
     std::chrono::milliseconds duration_{};
     quint64 scannedDirectoriesCount_{};
     quint64 scannedFilesCount_{};
+    quint64 problematicFilesCount_{};
     quint64 totalScannedBytes_{};
     quint64 duplicateGroupsCount_{};
     quint64 totalFilesInDuplicateGroupsCount_{};

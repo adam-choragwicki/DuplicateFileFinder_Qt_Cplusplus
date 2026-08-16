@@ -17,6 +17,7 @@ TEST_F(ScanSummaryLoggerTest, CheckFileNameSummary_FileNameScanOmitsRecoverableD
             std::chrono::milliseconds(1),
             1,
             2,
+            1,
             3,
             0,
             0,
@@ -26,6 +27,7 @@ TEST_F(ScanSummaryLoggerTest, CheckFileNameSummary_FileNameScanOmitsRecoverableD
     const QString log = captureLog(result);
 
     EXPECT_TRUE(log.contains("File name scan summary"));
+    EXPECT_TRUE(log.contains("Problematic files skipped: 1"));
     EXPECT_FALSE(log.contains("Potentially recoverable disk space"));
 }
 
@@ -39,6 +41,7 @@ TEST_F(ScanSummaryLoggerTest, CheckFileContentSummary_ByteCountsAndDurationAreFo
             std::chrono::milliseconds(1),
             1,
             2,
+            1,
             3,
             1,
             2,
@@ -64,6 +67,7 @@ TEST_F(ScanSummaryLoggerTest, CheckCommonSummary_TotalScannedBytesAreOmitted)
             std::chrono::milliseconds(1),
             1,
             2,
+            0,
             3,
             0,
             0,

@@ -431,6 +431,7 @@ ScanResult FileContentScanWorkflow::createFinalScanResult(QList<DuplicateGroup> 
         std::chrono::milliseconds(elapsedMilliseconds),
         collectionMetrics.getScannedDirectoriesCount(),
         collectionMetrics.getScannedFilesCount(),
+        collectionMetrics.getProblematicFilesCount(),
         collectionMetrics.getTotalScannedBytes(),
         static_cast<quint64>(duplicateGroups.size()),
         duplicateMetrics.getFilesCount(),
