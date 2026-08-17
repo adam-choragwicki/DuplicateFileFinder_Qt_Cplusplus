@@ -51,6 +51,7 @@ private:
     [[nodiscard]] QTreeWidgetItem* createDirectoryTreeItem(const QString& directoryPath, const QString& displayedPath) const; // TODO move it out of this class
     [[nodiscard]] static QFileInfoList findChildDirectories(const QString& directoryPath); // TODO move it out of this class
     [[nodiscard]] QString getInitialDirectoryScanPath() const;
+    void initializeResultsTabCloseButton();
 
     static constexpr int directoryPathDataRole_ = Qt::UserRole; // TODO move it out of this class
     static constexpr int directoryChildrenLoadedDataRole_ = Qt::UserRole + 1; // TODO move it out of this class

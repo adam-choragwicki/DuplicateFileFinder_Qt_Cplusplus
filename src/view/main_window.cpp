@@ -5,6 +5,8 @@
 #include <QComboBox>
 #include <QDir>
 #include <QMessageBox>
+#include <QTabBar>
+#include <QToolButton>
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWindow)
 {
@@ -39,6 +41,7 @@ void MainWindow::initializeUI()
 
     populateScanTypeComboBox();
     initializeDirectoriesTree();
+    initializeResultsTabCloseButton();
     clearScanResult(); // result tab is not visible from the start
 }
 
@@ -267,4 +270,34 @@ QString MainWindow::getInitialDirectoryScanPath() const
     }
 
     throw std::runtime_error("Invalid TestType");
+}
+
+void MainWindow::initializeResultsTabCloseButton()
+{
+    auto* closeButton = new QToolButton(ui->main_TabWidget->tabBar());
+    closeButton->setObjectName(QStringLiteral("closeResultsTab_ToolButton"));
+    closeButton->setIcon(style()->standardIcon(QStyle::SP_TabCloseButton));
+    closeButton->setIconSize(QSize(12, 12));
+    closeButton->setToolTip(QStringLiteral("Close Results"));
+    closeButton->setAccessibleName(QStringLiteral("Close Results tab"));
+    closeButton->setFixedSize(12, 12);
+    closeButton->setStyleSheet(QStringLiteral(R"(
+        QToolButton {
+            background: transparent;
+            border: none;
+            margin: 0;
+            padding: 0;
+        }
+        QToolButton:hover {
+            background-color: rgba(128, 128, 128, 45);
+        }
+        QToolButton:pressed {
+            background-color: rgba(128, 128, 128, 85);
+        }
+    )"));
+
+    const int resultsTabIndex = ui->main_TabWidget->indexOf(ui->resultsTab);
+    ui->main_TabWidget->tabBar()->setTabButton(resultsTabIndex, QTabBar::RightSide, closeButton);
+
+    connect(closeButton, &QToolButton::clicked, this, &MainWindow::clearScanResult);
 }
