@@ -39,6 +39,7 @@ void MainWindow::initializeUI()
 
     populateScanTypeComboBox();
     initializeDirectoriesTree();
+    clearScanResult(); // result tab is not visible from the start
 }
 
 void MainWindow::initializeDirectoriesTree()
@@ -79,10 +80,27 @@ void MainWindow::showAboutDialog()
 
 void MainWindow::showScanResult(const ScanResult& scanResult)
 {
-    ui->resultsTab->showDuplicateGroups(scanResult.getDuplicateGroups());
+    if (scanResult.getDuplicateGroups().isEmpty())
+    {
+        clearScanResult();
+        return;
+    }
 
+    const int resultsTabIndex = ui->main_TabWidget->indexOf(ui->resultsTab);
+    ui->main_TabWidget->setTabVisible(resultsTabIndex, true);
+    ui->resultsTab->showDuplicateGroups(scanResult.getDuplicateGroups());
     ui->exportToHtml_Action->setEnabled(true);
     ui->main_TabWidget->setCurrentWidget(ui->resultsTab);
+}
+
+void MainWindow::clearScanResult()
+{
+    ui->resultsTab->clearDuplicateGroups();
+    ui->exportToHtml_Action->setEnabled(false);
+    ui->main_TabWidget->setCurrentWidget(ui->directoriesTab);
+
+    const int resultsTabIndex = ui->main_TabWidget->indexOf(ui->resultsTab);
+    ui->main_TabWidget->setTabVisible(resultsTabIndex, false);
 }
 
 QStringList MainWindow::getScanDirectoryPaths() const

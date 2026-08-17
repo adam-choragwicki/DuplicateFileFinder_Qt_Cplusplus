@@ -200,6 +200,12 @@ void ResultsTab::showDuplicateGroups(const QList<DuplicateGroup>& duplicateGroup
     }
 }
 
+void ResultsTab::clearDuplicateGroups()
+{
+    duplicateGroups_.clear();
+    rebuildResultsTable();
+}
+
 const QList<DuplicateGroup>& ResultsTab::getDisplayedDuplicateGroups() const
 {
     return duplicateGroups_;
@@ -224,10 +230,10 @@ void ResultsTab::sortResultGroups(const int column, const Qt::SortOrder sortOrde
 
     sortColumn_ = column;
     sortOrder_ = sortOrder;
-    populateTable();
+    rebuildResultsTable();
 }
 
-void ResultsTab::populateTable()
+void ResultsTab::rebuildResultsTable()
 {
     ui->results_TableWidget->setUpdatesEnabled(false);
     ui->results_TableWidget->clearContents();

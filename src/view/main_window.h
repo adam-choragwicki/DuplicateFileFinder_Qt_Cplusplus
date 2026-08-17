@@ -31,6 +31,7 @@ public:
 
     [[nodiscard]] ScanType getScanType() const;
     void showScanResult(const ScanResult& scanResult);
+    void clearScanResult();
     [[nodiscard]] QStringList getScanDirectoryPaths() const; /// Get all of top level paths in directories tree
     void addScanDirectory(const QString& directoryPath);
     void removeScanDirectory(const QString& directoryPath);

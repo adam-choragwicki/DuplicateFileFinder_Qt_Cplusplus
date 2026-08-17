@@ -62,6 +62,10 @@ void Controller::onExportToHtmlRequested()
 
 void Controller::onStartScanButtonClicked()
 {
+    // Results describe only the most recently completed scan. Invalidate the previous result
+    // before starting new work so it cannot be viewed or exported while this scan is in progress.
+    view_.clearScanResult();
+
     if (scanner_.isScanning())
     {
         return;
@@ -234,11 +238,21 @@ void Controller::onScanOperationComplete(const ScanResult& scanResult)
     const bool completedWithProblems = problematicFilesCount > 0
                                        && scanResult.getOutcome() != ScanOutcome::Failed
                                        && scanResult.getOutcome() != ScanOutcome::Cancelled;
+    const bool scanHasMeaningfulResults = scanResult.getOutcome() == ScanOutcome::CompletedWithDuplicates
+                                          && !scanResult.getDuplicateGroups().isEmpty();
+
+    if (scanHasMeaningfulResults)
+    {
+        view_.showScanResult(scanResult);
+    }
+    else
+    {
+        view_.clearScanResult();
+    }
 
     switch (scanResult.getOutcome())
     {
         case ScanOutcome::CompletedWithDuplicates:
-            view_.showScanResult(scanResult);
             break;
 
         case ScanOutcome::CompletedWithoutDuplicates:
@@ -290,6 +304,7 @@ void Controller::onScanOperationComplete(const ScanResult& scanResult)
 void Controller::onScanOperationCancelled()
 {
     closeScanProgressDialog();
+    view_.clearScanResult();
 }
 
 void Controller::closeScanProgressDialog()

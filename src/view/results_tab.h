@@ -21,6 +21,7 @@ public:
     ~ResultsTab() override;
 
     void showDuplicateGroups(const QList<DuplicateGroup>& duplicateGroups);
+    void clearDuplicateGroups();
     [[nodiscard]] const QList<DuplicateGroup>& getDisplayedDuplicateGroups() const;
 
 private:
@@ -30,7 +31,7 @@ private:
     void revealFileInSystemFileManager(int row);
     void showResultContextMenu(const QPoint& position);
     void sortResultGroups(int column, Qt::SortOrder sortOrder);
-    void populateTable();
+    void rebuildResultsTable();
 
     Ui::ResultsTab* ui;
     QList<DuplicateGroup> duplicateGroups_;
