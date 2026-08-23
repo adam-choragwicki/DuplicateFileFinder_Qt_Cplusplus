@@ -1,5 +1,5 @@
 add_subdirectory(types)
-add_subdirectory(view)
+add_subdirectory(frontend)
 
 add_library(scan_core
         file_collector.cpp file_collector.h

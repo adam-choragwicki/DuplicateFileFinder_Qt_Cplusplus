@@ -24,7 +24,7 @@
     <item>
      <widget class="QTabWidget" name="main_TabWidget">
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="directoriesTab">
        <attribute name="title">
@@ -224,7 +224,7 @@
   <customwidget>
    <class>ResultsTab</class>
    <extends>QWidget</extends>
-   <header>view/results_tab.h</header>
+   <header>frontend/results_tab.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>
