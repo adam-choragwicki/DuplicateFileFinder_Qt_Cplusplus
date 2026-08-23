@@ -22,6 +22,7 @@ include(GoogleTest)
 gtest_add_tests(TARGET scan_workflow_tests TEST_LIST scanWorkflowTests)
 
 if (WIN32)
+    # CTest needs the Qt DLL directory on PATH when it launches the scan workflow tests.
     set_tests_properties(${scanWorkflowTests} PROPERTIES
             ENVIRONMENT "PATH=$<TARGET_FILE_DIR:Qt6::Core>\;$ENV{PATH}"
     )

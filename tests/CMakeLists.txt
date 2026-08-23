@@ -7,3 +7,4 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 add_subdirectory(lib/googletest EXCLUDE_FROM_ALL)
 
 add_subdirectory(scan_workflow_tests)
+add_subdirectory(frontend_tests)
