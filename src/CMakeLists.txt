@@ -1,4 +1,5 @@
 add_subdirectory(types)
+add_subdirectory(view)
 
 add_library(scan_core
         file_collector.cpp file_collector.h
@@ -22,8 +23,6 @@ qt_add_executable(${PROJECT_NAME}
         main.cpp
         application.cpp application.h
         model.cpp model.h model.cpp
-        view/main_window.cpp view/main_window.h view/main_window.ui
-        view/results_tab.cpp view/results_tab.h view/results_tab.ui
         controller.cpp controller.h
         log_manager.cpp log_manager.h
         scanner.cpp scanner.h
@@ -43,6 +42,7 @@ target_link_libraries(${PROJECT_NAME}
         Qt6::Widgets
         Qt6::Concurrent
         scan_core
+        app_frontend
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE

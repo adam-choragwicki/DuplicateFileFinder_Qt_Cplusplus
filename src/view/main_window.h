@@ -2,7 +2,11 @@
 
 #include "types/scan_type.h"
 #include "types/scan_result.h"
-#include <ui_main_window.h>
+
+#include <QFileInfo>
+#include <QMainWindow>
+
+class QTreeWidgetItem;
 
 QT_BEGIN_NAMESPACE
 
