@@ -13,31 +13,32 @@ namespace
 
     [[nodiscard]] QString getFileNameComparisonKey(const QString& fileName)
     {
+        QString comparisonKey = fileName;
+
         if constexpr (includeFileExtensionInFileNameScan)
         {
-            return fileName;
+            return comparisonKey.toCaseFolded();
         }
 
         const qsizetype extensionSeparatorIndex = fileName.lastIndexOf('.');
-        if (extensionSeparatorIndex < 0)
+        if (extensionSeparatorIndex >= 0)
         {
-            return fileName;
+            // On Linux a leading dot normally marks a hidden file rather than an extension. Preserve names such as ".bashrc", but still remove the final extension from ".config.json".
+            qsizetype firstNonDotCharacterIndex = 0;
+            while (firstNonDotCharacterIndex < fileName.size() && fileName.at(firstNonDotCharacterIndex) == '.')
+            {
+                ++firstNonDotCharacterIndex;
+            }
+
+            if (extensionSeparatorIndex >= firstNonDotCharacterIndex)
+            {
+                // Only the suffix after the final dot is treated as the extension. For example, "archive.tar.gz" produces the comparison key "archive.tar".
+                comparisonKey.truncate(extensionSeparatorIndex);
+            }
         }
 
-        // On Linux a leading dot normally marks a hidden file rather than an extension. Preserve names such as ".bashrc", but still remove the final extension from ".config.json".
-        qsizetype firstNonDotCharacterIndex = 0;
-        while (firstNonDotCharacterIndex < fileName.size() && fileName.at(firstNonDotCharacterIndex) == '.')
-        {
-            ++firstNonDotCharacterIndex;
-        }
-
-        if (extensionSeparatorIndex < firstNonDotCharacterIndex)
-        {
-            return fileName;
-        }
-
-        // Only the suffix after the final dot is treated as the extension. For example, "archive.tar.gz" produces the comparison key "archive.tar".
-        return fileName.left(extensionSeparatorIndex);
+        // File-name matching is always case-insensitive, independently of the host filesystem's path rules.
+        return comparisonKey.toCaseFolded();
     }
 }
 

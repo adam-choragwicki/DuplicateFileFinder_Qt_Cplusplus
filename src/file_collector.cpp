@@ -4,7 +4,7 @@
 #include <QDirIterator>
 #include <QFileInfo>
 
-Qt::CaseSensitivity FileCollector::pathCaseSensitivity()
+Qt::CaseSensitivity FileCollector::getScanRootPathCaseSensitivity()
 {
 #if defined(Q_OS_WIN)
     return Qt::CaseInsensitive;
@@ -22,7 +22,7 @@ bool FileCollector::isProperSubdirectoryOf(const QString& directoryPath, const Q
         parentPathPrefix.append('/');
     }
 
-    return directoryPath.startsWith(parentPathPrefix, pathCaseSensitivity());
+    return directoryPath.startsWith(parentPathPrefix, getScanRootPathCaseSensitivity());
 }
 
 QStringList FileCollector::getNonOverlappingRootDirectoryPaths(const QStringList& rootDirectoryPaths)
@@ -66,7 +66,7 @@ QStringList FileCollector::getNonOverlappingRootDirectoryPaths(const QStringList
             }
 
             const QString& otherRootPath = rootDirectories.at(otherRootIndex).normalizedPath;
-            const bool isRepeatedRoot = rootDirectory.normalizedPath.compare(otherRootPath, pathCaseSensitivity()) == 0;
+            const bool isRepeatedRoot = rootDirectory.normalizedPath.compare(otherRootPath, getScanRootPathCaseSensitivity()) == 0;
 
             if ((isRepeatedRoot && otherRootIndex < rootIndex)
                 || isProperSubdirectoryOf(rootDirectory.normalizedPath, otherRootPath))

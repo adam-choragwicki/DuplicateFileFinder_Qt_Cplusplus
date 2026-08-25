@@ -61,6 +61,26 @@ TEST_F(ScanByFileNameTest, CheckDuplicateGroups_FileNamesDifferOnlyByFinalExtens
     EXPECT_TRUE(containsDuplicateGroup(scanResult, expectedDuplicateGroup));
 }
 
+/// Verifies that file-name matching ignores letter case on every operating system.
+TEST_F(ScanByFileNameTest, CheckDuplicateGroups_FileNamesDifferOnlyByLetterCase)
+{
+    ASSERT_TRUE(writeFile("first/Report.txt", "first"));
+    ASSERT_TRUE(writeFile("second/report.txt", "second"));
+    ASSERT_TRUE(writeFile("third/unrelated.txt", "unrelated"));
+
+    const QString scanRootPath = getTemporaryScanRootPath();
+    const DuplicateGroup expectedDuplicateGroup = createExpectedDuplicateGroup({createExpectedFileRecord(scanRootPath, "first/Report.txt", 5),
+                                                                                createExpectedFileRecord(scanRootPath, "second/report.txt", 6)});
+
+    const ScanResult scanResult = FileNameScanWorkflow().execute(QStringList{scanRootPath},
+                                                                 std::stop_source().get_token(),
+                                                                 ignoreProgressCallback);
+
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
+    ASSERT_EQ(scanResult.getDuplicateGroups().size(), 1);
+    EXPECT_TRUE(containsDuplicateGroup(scanResult, expectedDuplicateGroup));
+}
+
 /// Verifies that equal extensionless file names are grouped without requiring a dot or extension.
 TEST_F(ScanByFileNameTest, CheckDuplicateGroups_ExtensionlessFileNames)
 {
