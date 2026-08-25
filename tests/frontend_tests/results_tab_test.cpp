@@ -1,7 +1,12 @@
 #include "frontend/results_tab.h"
 
+#include <QApplication>
+#include <QClipboard>
 #include <QHeaderView>
+#include <QKeyEvent>
+#include <QMenu>
 #include <QTableWidget>
+#include <QTimer>
 
 #include <gtest/gtest.h>
 
@@ -48,6 +53,102 @@ namespace
             ASSERT_NE(fileNameItem, nullptr);
             EXPECT_EQ(fileNameItem->text().toStdString(), expectedFileNames.at(row).toStdString());
         }
+    }
+
+    /// @brief Opens a result context menu and activates the action with the requested text.
+    ///
+    /// A fail-safe timer closes the popup if it cannot be found or does not close after activation, preventing
+    /// the modal `QMenu::exec()` call from hanging the test process.
+    ///
+    /// @param resultsTable Table whose custom-context-menu signal is invoked.
+    /// @param position Position within the table viewport at which the menu is requested.
+    /// @param actionText Text of the context-menu action to activate.
+    /// @return `true` if the popup menu and requested action were found and the action was activated.
+    bool activateContextMenuAction(QTableWidget& resultsTable, const QPoint& position, const QString& actionText)
+    {
+        // The zero-delay callback updates this flag while the function is blocked inside the menu's nested
+        // event loop. The value lets the caller distinguish successful automation from fail-safe dismissal.
+        bool actionWasActivated = false;
+
+        // QMenu::exec() is modal and would block indefinitely if the automation callback failed before closing
+        // the menu. Keep a local timer alive for the entire nested event loop as a last-resort escape path.
+        QTimer failSafeCloseTimer;
+
+        // Only one dismissal attempt is required. Repeating the timeout could affect a later, unrelated popup.
+        failSafeCloseTimer.setSingleShot(true);
+
+        // Close the active popup if lookup or activation fails, preventing QMenu::exec() from hanging the test.
+        QObject::connect(&failSafeCloseTimer, &QTimer::timeout, &resultsTable,
+                         []
+                         {
+                             // The production code creates QMenu as a local object, so the test cannot retain a
+                             // direct pointer before the menu opens. Query Qt for the popup that is active now.
+                             if (QWidget* activePopup = QApplication::activePopupWidget())
+                             {
+                                 // Closing the popup makes QMenu::exec() return even when no action was selected.
+                                 activePopup->close();
+                             }
+                         });
+
+        // Start the fail-safe before requesting the menu so every failure path remains time-bounded.
+        failSafeCloseTimer.start(250);
+
+        // Queue action selection before requesting the menu. A zero-delay callback cannot run until control
+        // reaches QMenu::exec() and its nested event loop starts processing events, at which point the popup exists.
+        QTimer::singleShot(0, &resultsTable,
+                           [&actionWasActivated, actionText]
+                           {
+                               // The context menu is owned by the production stack frame and is discoverable only
+                               // while QMenu::exec() is active. qobject_cast also verifies that the popup is a menu.
+                               auto* contextMenu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+
+                               if (!contextMenu)
+                               {
+                                   // Leave the flag false. The fail-safe timer will release the modal event loop if
+                                   // no suitable popup appeared.
+                                   return;
+                               }
+
+                               // Match the same user-visible action label that appears in the context menu.
+                               for (QAction* action: contextMenu->actions())
+                               {
+                                   if (action->text() == actionText)
+                                   {
+                                       // Record successful lookup before sending input because the Enter event can
+                                       // synchronously dismiss the menu and allow the production slot to continue.
+                                       actionWasActivated = true;
+
+                                       // Enter activates whichever QAction QMenu currently considers selected.
+                                       contextMenu->setActiveAction(action);
+
+                                       // Route activation through QMenu rather than calling QAction::trigger(). A
+                                       // direct trigger emits QAction::triggered but does not make exec() return that
+                                       // QAction, so the production code's selected-action branch would not execute.
+                                       QKeyEvent enterKeyPress(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+                                       QApplication::sendEvent(contextMenu, &enterKeyPress);
+
+                                       // Complete the synthetic key interaction with the corresponding release event.
+                                       QKeyEvent enterKeyRelease(QEvent::KeyRelease, Qt::Key_Return, Qt::NoModifier);
+                                       QApplication::sendEvent(contextMenu, &enterKeyRelease);
+                                       return;
+                                   }
+                               }
+
+                               // The menu opened but did not contain the requested action. Close it immediately
+                               // instead of waiting for the fail-safe timeout; actionWasActivated remains false.
+                               contextMenu->close();
+                           });
+
+        // Invoke the same signal emitted for a user context-menu request. Its connected production slot opens the
+        // modal QMenu and blocks here until the queued callback selects an action or the fail-safe closes the popup.
+        resultsTable.customContextMenuRequested(position);
+
+        // Normal menu completion no longer needs the fallback. Stopping it also prevents a pending timeout from
+        // closing a popup created later in the same test process.
+        failSafeCloseTimer.stop();
+
+        // Report whether the requested action was actually located and activated, not merely whether the menu closed.
+        return actionWasActivated;
     }
 }
 
@@ -300,4 +401,150 @@ TEST(ResultsTabTest, ReplacePreviousRows_WhenNewResultsAreShown)
     verifyExpectedFileNameOrder(*resultsTable, {QStringLiteral("new.txt"), QStringLiteral("new-copy.txt")});
     ASSERT_EQ(resultsTab.getDisplayedDuplicateGroups().size(), 1);
     EXPECT_EQ(resultsTab.getDisplayedDuplicateGroups().constFirst().getFiles().constFirst().getFileName().toStdString(), std::string("new.txt"));
+}
+
+/// @brief Verifies that the context-menu Copy path action copies the selected file's native path.
+///
+/// @par Test setup
+/// Display a duplicate group in a visible `ResultsTab`, locate the second file's table row, and preserve the
+/// clipboard's original text so the test can restore it afterward.
+///
+/// @par Procedure
+/// Request the context menu over the second row and activate its Copy path action.
+///
+/// @par Expected results
+/// - The Copy path action is found and activated.
+/// - The clipboard contains the selected file's absolute path using native directory separators.
+TEST(ResultsTabContextMenuTest, CopyNativePath_WhenCopyContextActionIsSelected)
+{
+    ResultsTab resultsTab;
+    const FileRecord referenceFile{QStringLiteral("reference.txt"), QStringLiteral("C:/first"), 1024};
+    const FileRecord duplicateFile{QStringLiteral("duplicate.txt"), QStringLiteral("C:/second"), 1024};
+    resultsTab.showDuplicateGroups(QList<DuplicateGroup>{createDuplicateGroup({referenceFile, duplicateFile})});
+    resultsTab.resize(600, 300);
+    resultsTab.show();
+
+    QApplication::processEvents();
+
+    auto* resultsTable = resultsTab.findChild<QTableWidget*>(QStringLiteral("results_TableWidget"));
+    ASSERT_NE(resultsTable, nullptr);
+    const QTableWidgetItem* duplicateFileNameItem = resultsTable->item(1, fileNameColumn);
+    ASSERT_NE(duplicateFileNameItem, nullptr);
+
+    const QPoint duplicateRowPosition = resultsTable->visualItemRect(duplicateFileNameItem).center();
+    ASSERT_TRUE(resultsTable->indexAt(duplicateRowPosition).isValid());
+
+    QClipboard* clipboard = QApplication::clipboard();
+    ASSERT_NE(clipboard, nullptr);
+    const QString originalClipboardText = clipboard->text();
+    clipboard->setText(QStringLiteral("unchanged"));
+
+    const bool actionWasActivated = activateContextMenuAction(*resultsTable, duplicateRowPosition,QStringLiteral("Copy path"));
+
+    EXPECT_TRUE(actionWasActivated);
+    EXPECT_EQ(clipboard->text().toStdString(), QDir::toNativeSeparators(duplicateFile.getAbsoluteFilePath()).toStdString());
+
+    clipboard->setText(originalClipboardText);
+}
+
+/// @brief Verifies that the context-menu Reveal action emits a request for the selected file.
+///
+/// @par Test setup
+/// Display a duplicate group in a visible `ResultsTab`, locate its reference-file row, and attach an observer
+/// to `ResultsTab::revealFileInSystemFileManagerRequested`.
+///
+/// @par Procedure
+/// Request the context menu over the reference row and activate its Reveal in file manager action.
+///
+/// @par Expected results
+/// - The Reveal action is found and activated.
+/// - `revealFileInSystemFileManagerRequested` is emitted exactly once with the reference file's absolute path.
+TEST(ResultsTabContextMenuTest, RequestFileReveal_WhenRevealContextActionIsSelected)
+{
+    ResultsTab resultsTab;
+    const FileRecord referenceFile{QStringLiteral("reference.txt"), QStringLiteral("C:/first"), 1024};
+    const FileRecord duplicateFile{QStringLiteral("duplicate.txt"), QStringLiteral("C:/second"), 1024};
+    resultsTab.showDuplicateGroups(QList<DuplicateGroup>{createDuplicateGroup({referenceFile, duplicateFile})});
+    resultsTab.resize(600, 300);
+    resultsTab.show();
+
+    QApplication::processEvents();
+
+    auto* resultsTable = resultsTab.findChild<QTableWidget*>(QStringLiteral("results_TableWidget"));
+    ASSERT_NE(resultsTable, nullptr);
+    const QTableWidgetItem* referenceFileNameItem = resultsTable->item(0, fileNameColumn);
+    ASSERT_NE(referenceFileNameItem, nullptr);
+
+    const QPoint referenceRowPosition = resultsTable->visualItemRect(referenceFileNameItem).center();
+    ASSERT_TRUE(resultsTable->indexAt(referenceRowPosition).isValid());
+
+    int revealRequestCount = 0;
+    QString requestedAbsoluteFilePath;
+    QObject::connect(&resultsTab, &ResultsTab::revealFileInSystemFileManagerRequested, &resultsTab,
+                     [&](const QString& absoluteFilePath)
+                     {
+                         ++revealRequestCount;
+                         requestedAbsoluteFilePath = absoluteFilePath;
+                     });
+
+    const bool actionWasActivated = activateContextMenuAction(*resultsTable,
+                                                              referenceRowPosition,
+                                                              QStringLiteral("Reveal in file manager"));
+
+    EXPECT_TRUE(actionWasActivated);
+    EXPECT_EQ(revealRequestCount, 1);
+    EXPECT_EQ(requestedAbsoluteFilePath.toStdString(), referenceFile.getAbsoluteFilePath().toStdString());
+}
+
+/// @brief Verifies that requesting a context menu outside a result row has no effect.
+///
+/// @par Test setup
+/// Display a duplicate group in a visible `ResultsTab`, select its first cell, preserve the clipboard text, and
+/// attach an observer to the file-reveal request signal. Choose an empty point below all populated rows.
+///
+/// @par Procedure
+/// Invoke the table's custom-context-menu signal at the empty viewport position.
+///
+/// @par Expected results
+/// - No context menu is opened and no file-reveal request is emitted.
+/// - The clipboard and current table selection remain unchanged.
+TEST(ResultsTabContextMenuTest, DoNothing_WhenContextMenuIsRequestedOutsideAResultRow)
+{
+    ResultsTab resultsTab;
+    const FileRecord referenceFile{QStringLiteral("reference.txt"), QStringLiteral("C:/first"), 1024};
+    const FileRecord duplicateFile{QStringLiteral("duplicate.txt"), QStringLiteral("C:/second"), 1024};
+    resultsTab.showDuplicateGroups(QList<DuplicateGroup>{createDuplicateGroup({referenceFile, duplicateFile})});
+    resultsTab.resize(600, 300);
+    resultsTab.show();
+
+    QApplication::processEvents();
+
+    auto* resultsTable = resultsTab.findChild<QTableWidget*>(QStringLiteral("results_TableWidget"));
+    ASSERT_NE(resultsTable, nullptr);
+    resultsTable->setCurrentCell(0, fileNameColumn);
+    const QModelIndex originalCurrentIndex = resultsTable->currentIndex();
+    ASSERT_TRUE(originalCurrentIndex.isValid());
+
+    const QPoint emptyPosition(resultsTable->viewport()->width() / 2,
+                               resultsTable->viewport()->height() - 1);
+    ASSERT_FALSE(resultsTable->indexAt(emptyPosition).isValid());
+
+    int revealRequestCount = 0;
+    QObject::connect(&resultsTab, &ResultsTab::revealFileInSystemFileManagerRequested, &resultsTab,
+                     [&revealRequestCount](const QString&) { ++revealRequestCount; });
+
+    QClipboard* clipboard = QApplication::clipboard();
+    ASSERT_NE(clipboard, nullptr);
+    const QString originalClipboardText = clipboard->text();
+    const QString sentinelClipboardText = QStringLiteral("clipboard must remain unchanged");
+    clipboard->setText(sentinelClipboardText);
+
+    resultsTable->customContextMenuRequested(emptyPosition);
+
+    EXPECT_EQ(QApplication::activePopupWidget(), nullptr);
+    EXPECT_EQ(revealRequestCount, 0);
+    EXPECT_EQ(clipboard->text().toStdString(), sentinelClipboardText.toStdString());
+    EXPECT_TRUE(resultsTable->currentIndex() == originalCurrentIndex);
+
+    clipboard->setText(originalClipboardText);
 }
