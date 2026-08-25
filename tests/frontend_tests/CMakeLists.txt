@@ -1,5 +1,6 @@
 add_executable(frontend_tests
         frontend_test_main.cpp
+        directories_tab_test.cpp
         main_window_test.cpp
         results_tab_test.cpp
 )
