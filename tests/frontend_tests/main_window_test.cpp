@@ -1,8 +1,10 @@
 #include "frontend/main_window.h"
 
 #include <QAction>
+#include <QPushButton>
 #include <QTabWidget>
 #include <QTableWidget>
+#include <QTemporaryDir>
 #include <QToolButton>
 
 #include <gtest/gtest.h>
@@ -232,4 +234,78 @@ TEST(MainWindowTest, RequestFileReveal_WhenResultRowIsDoubleClicked)
 
     EXPECT_EQ(revealRequestCount, 1);
     EXPECT_EQ(requestedAbsoluteFilePath.toStdString(), expectedAbsoluteFilePath.toStdString());
+}
+
+/// @brief Verifies that user-facing controls emit the request signals consumed by the controller.
+///
+/// @par Test setup
+/// Construct `MainWindow`, add a temporary scan root so directory removal is available, locate the Add directory,
+/// Remove directory, Start scan, and Export controls, and attach a counter to each corresponding request signal.
+///
+/// @par Procedure
+/// Activate the three directory/scan buttons one at a time, display a result to enable Export, and then activate
+/// the export action.
+///
+/// @par Expected results
+/// - Each control emits its corresponding request signal exactly once.
+/// - Activating one control does not emit any request signal belonging to another control.
+TEST(MainWindowTest, EmitExpectedRequestSignals_WhenControlsAreActivated)
+{
+    MainWindow mainWindow;
+    QTemporaryDir temporaryDirectory;
+    ASSERT_TRUE(temporaryDirectory.isValid());
+    mainWindow.addScanDirectory(temporaryDirectory.path());
+
+    auto* addDirectoryButton = mainWindow.findChild<QPushButton*>(QStringLiteral("addDirectory_PushButton"));
+    auto* removeDirectoryButton = mainWindow.findChild<QPushButton*>(QStringLiteral("removeDirectory_PushButton"));
+    auto* startScanButton = mainWindow.findChild<QPushButton*>(QStringLiteral("startScan_PushButton"));
+    auto* exportAction = mainWindow.findChild<QAction*>(QStringLiteral("exportToHtml_Action"));
+
+    ASSERT_NE(addDirectoryButton, nullptr);
+    ASSERT_NE(removeDirectoryButton, nullptr);
+    ASSERT_NE(startScanButton, nullptr);
+    ASSERT_NE(exportAction, nullptr);
+
+    int addDirectoryRequestCount = 0;
+    int removeDirectoryRequestCount = 0;
+    int startScanRequestCount = 0;
+    int exportRequestCount = 0;
+
+    QObject::connect(&mainWindow, &MainWindow::addDirectoryButtonClicked, &mainWindow,
+                     [&addDirectoryRequestCount] { ++addDirectoryRequestCount; });
+    QObject::connect(&mainWindow, &MainWindow::removeDirectoryButtonClicked, &mainWindow,
+                     [&removeDirectoryRequestCount] { ++removeDirectoryRequestCount; });
+    QObject::connect(&mainWindow, &MainWindow::startScanButtonClicked, &mainWindow,
+                     [&startScanRequestCount] { ++startScanRequestCount; });
+    QObject::connect(&mainWindow, &MainWindow::exportToHtmlRequested, &mainWindow,
+                     [&exportRequestCount] { ++exportRequestCount; });
+
+    ASSERT_TRUE(removeDirectoryButton->isEnabled());
+
+    addDirectoryButton->click();
+    EXPECT_EQ(addDirectoryRequestCount, 1);
+    EXPECT_EQ(removeDirectoryRequestCount, 0);
+    EXPECT_EQ(startScanRequestCount, 0);
+    EXPECT_EQ(exportRequestCount, 0);
+
+    removeDirectoryButton->click();
+    EXPECT_EQ(addDirectoryRequestCount, 1);
+    EXPECT_EQ(removeDirectoryRequestCount, 1);
+    EXPECT_EQ(startScanRequestCount, 0);
+    EXPECT_EQ(exportRequestCount, 0);
+
+    startScanButton->click();
+    EXPECT_EQ(addDirectoryRequestCount, 1);
+    EXPECT_EQ(removeDirectoryRequestCount, 1);
+    EXPECT_EQ(startScanRequestCount, 1);
+    EXPECT_EQ(exportRequestCount, 0);
+
+    mainWindow.showScanResult(createScanResultWithDuplicates());
+    ASSERT_TRUE(exportAction->isEnabled());
+    exportAction->trigger();
+
+    EXPECT_EQ(addDirectoryRequestCount, 1);
+    EXPECT_EQ(removeDirectoryRequestCount, 1);
+    EXPECT_EQ(startScanRequestCount, 1);
+    EXPECT_EQ(exportRequestCount, 1);
 }

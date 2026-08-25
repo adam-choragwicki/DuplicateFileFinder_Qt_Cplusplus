@@ -50,7 +50,7 @@ void MainWindow::initializeDirectoriesTree()
     ui->directories_TreeWidget->clear();
     ui->directories_TreeWidget->setUniformRowHeights(true);
 
-    addScanDirectory(getInitialDirectoryScanPath());
+    // addScanDirectory(getInitialDirectoryScanPath()); // TODO remove it eventually
     ui->directories_TreeWidget->clearSelection();
     updateDirectoryActionStates();
 }
