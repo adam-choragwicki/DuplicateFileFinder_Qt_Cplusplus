@@ -2,6 +2,10 @@ add_executable(application_tests
         application_test_main.cpp
         html_result_exporter_test.cpp
         asynchronous_scanner_test.cpp
+        scan_integration_test.cpp
+        temporary_scan_directory_test_fixture.h
+
+        ${PROJECT_SOURCE_DIR}/src/controller.cpp ${PROJECT_SOURCE_DIR}/src/controller.h
 )
 
 target_link_libraries(application_tests
@@ -9,6 +13,7 @@ target_link_libraries(application_tests
         GTest::gtest
         Qt6::Widgets
         app_backend
+        app_frontend
 )
 
 include(GoogleTest)

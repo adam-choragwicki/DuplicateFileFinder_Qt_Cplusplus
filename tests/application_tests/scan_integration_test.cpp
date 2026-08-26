@@ -1,0 +1,321 @@
+#include "controller.h"
+#include "model.h"
+#include "temporary_scan_directory_test_fixture.h"
+
+#include <QAction>
+#include <QApplication>
+#include <QComboBox>
+#include <QDir>
+#include <QEventLoop>
+#include <QFileInfo>
+#include <QMessageBox>
+#include <QProgressDialog>
+#include <QPushButton>
+#include <QSet>
+#include <QTabWidget>
+#include <QTableWidget>
+#include <QTimer>
+
+#include <gtest/gtest.h>
+
+#include <functional>
+
+namespace
+{
+    /// @brief Provides an isolated directory tree for application scan integration tests.
+    class ApplicationScanIntegrationTest : public TemporaryScanDirectoryTest {};
+
+    /// @brief Stores the user-visible properties captured from a modal message box.
+    struct ObservedMessageBox
+    {
+        bool wasShown{};
+        bool waitTimedOut{};
+        QMessageBox::Icon icon{QMessageBox::NoIcon};
+        QString windowTitle;
+        QString text;
+    };
+
+    /// @brief Activates an application action and captures the next modal message box it opens.
+    ///
+    /// The helper supports both synchronous dialogs opened directly by @p action and dialogs opened later
+    /// after asynchronous scan completion. It closes the captured dialog so its nested event loop cannot block
+    /// the test executable.
+    ///
+    /// @param action User or application action expected to eventually open a message box.
+    /// @param timeoutMilliseconds Maximum time allowed for the message box to appear.
+    /// @return Captured message-box properties and whether the wait timed out.
+    [[nodiscard]] ObservedMessageBox activateAndObserveMessageBox(const std::function<void()>& action,
+                                                                  const int timeoutMilliseconds)
+    {
+        ObservedMessageBox observation;
+        QEventLoop eventLoop;
+        QTimer observationTimer;
+        QTimer timeoutTimer;
+
+        observationTimer.setInterval(10);
+        timeoutTimer.setSingleShot(true);
+
+        QObject::connect(&observationTimer, &QTimer::timeout, &eventLoop,
+                         [&]
+                         {
+                             auto* messageBox = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+                             if (!messageBox)
+                             {
+                                 return;
+                             }
+
+                             observation.wasShown = true;
+                             observation.icon = messageBox->icon();
+                             observation.windowTitle = messageBox->windowTitle();
+                             observation.text = messageBox->text();
+
+                             observationTimer.stop();
+                             timeoutTimer.stop();
+                             messageBox->accept();
+                             eventLoop.quit();
+                         });
+
+        QObject::connect(&timeoutTimer, &QTimer::timeout, &eventLoop,
+                         [&]
+                         {
+                             observation.waitTimedOut = true;
+
+                             if (QWidget* activeModalWidget = QApplication::activeModalWidget())
+                             {
+                                 activeModalWidget->close();
+                             }
+
+                             eventLoop.quit();
+                         });
+
+        observationTimer.start();
+        timeoutTimer.start(timeoutMilliseconds);
+        action();
+
+        // A directly opened message box runs its own event loop, allowing the observation timer to capture and
+        // close it before action() returns. Only asynchronous actions require this additional wait loop.
+        if (!observation.wasShown && !observation.waitTimedOut)
+        {
+            eventLoop.exec();
+        }
+
+        observationTimer.stop();
+        timeoutTimer.stop();
+        return observation;
+    }
+
+    /// @brief Processes Qt events until the main window displays duplicate groups or the timeout expires.
+    ///
+    /// @param mainWindow Window whose displayed result state is observed.
+    /// @param timeoutMilliseconds Maximum time allowed for the asynchronous scan.
+    /// @return `true` when duplicate groups became available before the timeout.
+    [[nodiscard]] bool waitForDisplayedDuplicateGroups(const MainWindow& mainWindow, const int timeoutMilliseconds)
+    {
+        if (!mainWindow.getDisplayedDuplicateGroups().isEmpty())
+        {
+            return true;
+        }
+
+        bool duplicateGroupsWereDisplayed = false;
+        QEventLoop eventLoop;
+        QTimer resultPollTimer;
+        QTimer timeoutTimer;
+
+        resultPollTimer.setInterval(10);
+        timeoutTimer.setSingleShot(true);
+
+        QObject::connect(&resultPollTimer, &QTimer::timeout, &eventLoop,
+                         [&]
+                         {
+                             if (!mainWindow.getDisplayedDuplicateGroups().isEmpty())
+                             {
+                                 duplicateGroupsWereDisplayed = true;
+                                 timeoutTimer.stop();
+                                 eventLoop.quit();
+                             }
+                         });
+        QObject::connect(&timeoutTimer, &QTimer::timeout, &eventLoop,
+                         [&]
+                         {
+                             // A regression may open an unexpected modal outcome dialog. Close it so the
+                             // failed integration test reports normally instead of hanging in its nested loop.
+                             if (QWidget* activeModalWidget = QApplication::activeModalWidget())
+                             {
+                                 activeModalWidget->close();
+                             }
+
+                             eventLoop.quit();
+                         });
+
+        resultPollTimer.start();
+        timeoutTimer.start(timeoutMilliseconds);
+        eventLoop.exec();
+
+        return duplicateGroupsWereDisplayed;
+    }
+}
+
+/// @brief Verifies that the controller rejects a scan request when the view contains no scan directories.
+///
+/// @par Test setup
+/// Construct `Model`, `MainWindow`, and `Controller` without adding a scan directory. Locate the Start scan
+/// button and confirm that the window reports an empty root list.
+///
+/// @par Procedure
+/// Click Start scan, capture and close the modal message box opened by the controller, and inspect whether a
+/// scan progress dialog or result was created.
+///
+/// @par Expected results
+/// - An informational "Nothing to scan" message explains that no directories are selected.
+/// - No progress dialog is created because the controller does not start the scanner.
+/// - No duplicate result becomes available.
+TEST(ControllerIntegrationTest, RejectScanAndExplainReason_WhenNoDirectoriesAreSelected)
+{
+    Model model;
+    MainWindow mainWindow;
+    Controller controller(model, mainWindow);
+
+    auto* startScanButton = mainWindow.findChild<QPushButton*>(QStringLiteral("startScan_PushButton"));
+
+    ASSERT_NE(startScanButton, nullptr);
+    ASSERT_TRUE(mainWindow.getScanDirectoryPaths().isEmpty());
+
+    const ObservedMessageBox messageBox = activateAndObserveMessageBox(
+        [startScanButton] { startScanButton->click(); },
+        1000);
+
+    ASSERT_FALSE(messageBox.waitTimedOut);
+    ASSERT_TRUE(messageBox.wasShown);
+    EXPECT_EQ(messageBox.icon, QMessageBox::Information);
+    EXPECT_EQ(messageBox.windowTitle.toStdString(), std::string("Nothing to scan"));
+    EXPECT_EQ(messageBox.text.toStdString(), std::string("Nothing to scan. No directories selected."));
+    EXPECT_EQ(mainWindow.findChild<QProgressDialog*>(), nullptr);
+    EXPECT_TRUE(mainWindow.getDisplayedDuplicateGroups().isEmpty());
+    EXPECT_EQ(QApplication::activeModalWidget(), nullptr);
+}
+
+/// @brief Verifies the complete UI-to-scanner path for a successful content scan that finds duplicates.
+///
+/// @par Test setup
+/// Create two differently named files with identical contents below a temporary root. Construct `Model`,
+/// `MainWindow`, and `Controller`, add the root directly to the window, select content scanning, and locate
+/// the Start control and result-related widgets.
+///
+/// @par Procedure
+/// Click Start scan and process Qt events until duplicate groups are displayed or the timeout expires. Then
+/// inspect the window state, result table, and file records produced by the asynchronous scan.
+///
+/// @par Expected results
+/// - The controller receives the Start request and runs the selected content workflow to completion.
+/// - One duplicate group containing both source files is displayed as two result rows.
+/// - The Results tab becomes visible and active, and HTML export becomes enabled.
+/// - No modal outcome dialog remains open after a successful scan with duplicates.
+TEST_F(ApplicationScanIntegrationTest, DisplayDuplicateResults_WhenContentScanIsStartedFromMainWindow)
+{
+    const QByteArray duplicateContents = QByteArrayLiteral("identical file contents");
+    ASSERT_TRUE(writeFile(QStringLiteral("first/original.bin"), duplicateContents));
+    ASSERT_TRUE(writeFile(QStringLiteral("second/copy.bin"), duplicateContents));
+
+    Model model;
+    MainWindow mainWindow;
+    Controller controller(model, mainWindow);
+
+    mainWindow.addScanDirectory(scanRootPath());
+
+    auto* scanTypeComboBox = mainWindow.findChild<QComboBox*>(QStringLiteral("scanType_ComboBox"));
+    auto* startScanButton = mainWindow.findChild<QPushButton*>(QStringLiteral("startScan_PushButton"));
+    auto* tabWidget = mainWindow.findChild<QTabWidget*>(QStringLiteral("main_TabWidget"));
+    auto* resultsTab = mainWindow.findChild<QWidget*>(QStringLiteral("resultsTab"));
+    auto* exportAction = mainWindow.findChild<QAction*>(QStringLiteral("exportToHtml_Action"));
+    auto* resultsTable = mainWindow.findChild<QTableWidget*>(QStringLiteral("results_TableWidget"));
+
+    ASSERT_NE(scanTypeComboBox, nullptr);
+    ASSERT_NE(startScanButton, nullptr);
+    ASSERT_NE(tabWidget, nullptr);
+    ASSERT_NE(resultsTab, nullptr);
+    ASSERT_NE(exportAction, nullptr);
+    ASSERT_NE(resultsTable, nullptr);
+
+    const int contentScanIndex = scanTypeComboBox->findData(QVariant::fromValue(ScanType::ByFileContent));
+    ASSERT_GE(contentScanIndex, 0);
+    scanTypeComboBox->setCurrentIndex(contentScanIndex);
+
+    mainWindow.show();
+    QApplication::processEvents();
+    startScanButton->click();
+
+    ASSERT_TRUE(waitForDisplayedDuplicateGroups(mainWindow, 5000));
+
+    const QList<DuplicateGroup>& displayedGroups = mainWindow.getDisplayedDuplicateGroups();
+    ASSERT_EQ(displayedGroups.size(), 1);
+    ASSERT_EQ(displayedGroups.constFirst().getFiles().size(), 2);
+    EXPECT_EQ(resultsTable->rowCount(), 2);
+
+    QSet<QString> displayedFilePaths;
+    for (const FileRecord& file: displayedGroups.constFirst().getFiles())
+    {
+        displayedFilePaths.insert(file.getAbsoluteFilePath());
+    }
+
+    EXPECT_TRUE(displayedFilePaths.contains(QFileInfo(QDir(scanRootPath()).filePath(QStringLiteral("first/original.bin"))).absoluteFilePath()));
+    EXPECT_TRUE(displayedFilePaths.contains(QFileInfo(QDir(scanRootPath()).filePath(QStringLiteral("second/copy.bin"))).absoluteFilePath()));
+    EXPECT_TRUE(tabWidget->isTabVisible(tabWidget->indexOf(resultsTab)));
+    EXPECT_EQ(tabWidget->currentWidget(), resultsTab);
+    EXPECT_TRUE(exportAction->isEnabled());
+    EXPECT_EQ(QApplication::activeModalWidget(), nullptr);
+}
+
+/// @brief Verifies the complete UI-to-scanner failure path when a selected scan root does not exist.
+///
+/// @par Test setup
+/// Construct `Model`, `MainWindow`, and `Controller`, add a path below the temporary root that has not been
+/// created, and locate the Start scan control and export action.
+///
+/// @par Procedure
+/// Click Start scan and process Qt events while the real asynchronous scanner rejects the missing root. Capture
+/// and close the modal outcome dialog, then inspect the progress and result-related state.
+///
+/// @par Expected results
+/// - The backend failure reaches the controller through the scanner's completion signal.
+/// - A critical "Scan failed" message explains that the operation could not be completed.
+/// - The progress dialog is closed, no duplicate groups are displayed, and export remains disabled.
+TEST_F(ApplicationScanIntegrationTest, ReportFailure_WhenScanRootDoesNotExist)
+{
+    const QString missingScanRootPath = QDir(scanRootPath()).filePath(QStringLiteral("missing"));
+    ASSERT_FALSE(QFileInfo::exists(missingScanRootPath));
+
+    Model model;
+    MainWindow mainWindow;
+    Controller controller(model, mainWindow);
+
+    mainWindow.addScanDirectory(missingScanRootPath);
+
+    auto* startScanButton = mainWindow.findChild<QPushButton*>(QStringLiteral("startScan_PushButton"));
+    auto* exportAction = mainWindow.findChild<QAction*>(QStringLiteral("exportToHtml_Action"));
+
+    ASSERT_NE(startScanButton, nullptr);
+    ASSERT_NE(exportAction, nullptr);
+
+    mainWindow.show();
+    QApplication::processEvents();
+
+    const ObservedMessageBox messageBox = activateAndObserveMessageBox(
+        [startScanButton] { startScanButton->click(); },
+        5000);
+
+    ASSERT_FALSE(messageBox.waitTimedOut);
+    ASSERT_TRUE(messageBox.wasShown);
+    EXPECT_EQ(messageBox.icon, QMessageBox::Critical);
+    EXPECT_EQ(messageBox.windowTitle.toStdString(), std::string("Scan failed"));
+    EXPECT_EQ(messageBox.text.toStdString(),
+              std::string("The scan could not be completed. Check the application log for details."));
+
+    if (const auto* progressDialog = mainWindow.findChild<QProgressDialog*>())
+    {
+        EXPECT_FALSE(progressDialog->isVisible());
+    }
+
+    EXPECT_TRUE(mainWindow.getDisplayedDuplicateGroups().isEmpty());
+    EXPECT_FALSE(exportAction->isEnabled());
+    EXPECT_EQ(QApplication::activeModalWidget(), nullptr);
+}

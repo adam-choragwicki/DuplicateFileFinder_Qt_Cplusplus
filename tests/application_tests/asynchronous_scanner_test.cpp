@@ -1,11 +1,8 @@
 #include "scanner.h"
 #include "scan_request.h"
+#include "temporary_scan_directory_test_fixture.h"
 
-#include <QDir>
 #include <QEventLoop>
-#include <QFile>
-#include <QFileInfo>
-#include <QTemporaryDir>
 #include <QTimer>
 
 #include <gtest/gtest.h>
@@ -16,43 +13,7 @@
 namespace
 {
     /// @brief Provides an isolated directory tree for asynchronous `Scanner` tests.
-    class AsynchronousScannerTest : public ::testing::Test
-    {
-    protected:
-        /// @brief Verifies that the fixture's temporary directory was created successfully.
-        void SetUp() override
-        {
-            ASSERT_TRUE(temporaryDirectory_.isValid());
-        }
-
-        /// @brief Creates or replaces a file below the fixture's temporary scan root.
-        ///
-        /// @param relativePath File path relative to the temporary scan root.
-        /// @param contents Complete byte sequence to write to the file.
-        /// @return `true` when all parent directories and file contents were written successfully.
-        [[nodiscard]] bool writeFile(const QString& relativePath, const QByteArray& contents) const
-        {
-            const QString absoluteFilePath = temporaryDirectory_.filePath(relativePath);
-
-            if (!QDir().mkpath(QFileInfo(absoluteFilePath).absolutePath()))
-            {
-                return false;
-            }
-
-            QFile outputFile(absoluteFilePath);
-            return outputFile.open(QIODevice::WriteOnly)
-                   && outputFile.write(contents) == contents.size();
-        }
-
-        /// @brief Returns the absolute path scanned by each test.
-        [[nodiscard]] QString scanRootPath() const
-        {
-            return temporaryDirectory_.path();
-        }
-
-    private:
-        QTemporaryDir temporaryDirectory_;
-    };
+    class AsynchronousScannerTest : public TemporaryScanDirectoryTest {};
 }
 
 /// @brief Verifies the successful asynchronous scanner lifecycle and its completion result.
