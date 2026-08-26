@@ -1,6 +1,7 @@
 add_executable(application_tests
         application_test_main.cpp
         html_result_exporter_test.cpp
+        asynchronous_scanner_test.cpp
 )
 
 target_link_libraries(application_tests
