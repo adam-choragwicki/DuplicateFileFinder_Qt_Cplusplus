@@ -1,4 +1,4 @@
-#include "scan_test_fixtures.h"
+#include "scan_workflow_test_fixture.h"
 #include "unreadable_file_scan_test_helpers.h"
 
 #include "file_content_scan_workflow.h"

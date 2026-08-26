@@ -1,4 +1,4 @@
-#include "scan_test_fixtures.h"
+#include "scan_workflow_test_fixture.h"
 
 #include "file_name_scan_workflow.h"
 #include "scan_summary/file_name_scan_summary.h"

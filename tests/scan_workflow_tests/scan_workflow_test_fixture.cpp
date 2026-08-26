@@ -1,4 +1,4 @@
-#include "scan_test_fixtures.h"
+#include "scan_workflow_test_fixture.h"
 
 #include <QDir>
 #include <QFile>

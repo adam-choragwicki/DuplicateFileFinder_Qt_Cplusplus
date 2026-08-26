@@ -1,5 +1,5 @@
 add_executable(scan_workflow_tests
-        scan_test_fixtures.cpp scan_test_fixtures.h
+        scan_workflow_test_fixture.cpp scan_workflow_test_fixture.h
         shared_scan_workflow_test.cpp
         scan_by_file_name_workflow_test.cpp
         scan_by_file_content_workflow_test.cpp
