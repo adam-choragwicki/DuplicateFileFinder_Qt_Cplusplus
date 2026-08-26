@@ -1,7 +1,5 @@
 #include "scan_test_fixtures.h"
 
-#include "scan_summary/scan_summary_logger.h"
-
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -124,36 +122,4 @@ bool ScanWorkflowTest::matchesExpectedFileRecord(const FileRecord& actualFile, c
     return actualFile.getFileName() == expectedFile.getFileName()
            && actualFile.getDirectoryPath() == expectedFile.getDirectoryPath()
            && actualFile.getSizeBytes() == expectedFile.getSizeBytes();
-}
-
-ScanSummaryLoggerTest* ScanSummaryLoggerTest::activeFixture_ = nullptr;
-
-void ScanSummaryLoggerTest::SetUp()
-{
-    activeFixture_ = this;
-    previousMessageHandler_ = qInstallMessageHandler(captureMessage);
-}
-
-void ScanSummaryLoggerTest::TearDown()
-{
-    qInstallMessageHandler(previousMessageHandler_);
-    activeFixture_ = nullptr;
-}
-
-QString ScanSummaryLoggerTest::captureLog(const ScanResult& scanResult)
-{
-    capturedMessages_.clear();
-    ScanSummaryLogger::log(scanResult);
-    return capturedMessages_.join('\n');
-}
-
-void ScanSummaryLoggerTest::captureMessage(
-    const QtMsgType,
-    const QMessageLogContext&,
-    const QString& message)
-{
-    if (activeFixture_)
-    {
-        activeFixture_->capturedMessages_.append(message);
-    }
 }

@@ -9,7 +9,6 @@
 #include <QList>
 #include <QString>
 #include <QTemporaryDir>
-#include <QtLogging>
 
 #include <algorithm>
 #include <variant>
@@ -68,20 +67,4 @@ private:
     [[nodiscard]] static bool matchesExpectedFileRecord(const FileRecord& actualFile, const FileRecord& expectedFile);
 
     QTemporaryDir temporaryDirectory_;
-};
-
-class ScanSummaryLoggerTest : public ::testing::Test
-{
-protected:
-    void SetUp() override;
-    void TearDown() override;
-
-    [[nodiscard]] QString captureLog(const ScanResult& scanResult);
-
-private:
-    static void captureMessage(QtMsgType type, const QMessageLogContext& context, const QString& message);
-
-    static ScanSummaryLoggerTest* activeFixture_;
-    QtMessageHandler previousMessageHandler_{};
-    QStringList capturedMessages_;
 };
