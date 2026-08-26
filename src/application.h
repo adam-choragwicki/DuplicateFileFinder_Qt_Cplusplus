@@ -1,6 +1,6 @@
 #pragma once
 
-#include "model.h"
+#include "backend/model.h"
 #include "controller.h"
 #include "frontend/main_window.h"
 

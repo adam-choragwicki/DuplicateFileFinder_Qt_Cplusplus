@@ -11,7 +11,7 @@ target_link_libraries(scan_workflow_tests
         PRIVATE
         Qt6::Core
         GTest::gtest_main
-        scan_core
+        app_backend
 )
 
 target_compile_definitions(scan_workflow_tests PRIVATE

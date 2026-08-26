@@ -1,6 +1,6 @@
 #include "controller.h"
-#include "html_result_exporter.h"
-#include "scan_request.h"
+#include "backend/html_result_exporter.h"
+#include "backend/scan_request.h"
 
 #include <QCoreApplication>
 #include <QDir>

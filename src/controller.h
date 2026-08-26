@@ -1,8 +1,8 @@
 #pragma once
 
-#include "model.h"
+#include "backend/model.h"
+#include "backend/scanner.h"
 #include "frontend/main_window.h"
-#include "scanner.h"
 
 class QProgressDialog;
 
