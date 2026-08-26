@@ -17,7 +17,19 @@ namespace
     {};
 }
 
-/// Verifies that scanning the smoke-test file system scenario tree by file content returns files with identical content and reports the expected recoverable bytes.
+/// @brief Verifies file-content-based duplicate detection against the maintained smoke-test directory tree.
+///
+/// @par Test setup
+/// Use the repository smoke-test tree and construct the expected group from the two known files with identical
+/// contents but different names and extensions.
+///
+/// @par Procedure
+/// Execute `FileContentScanWorkflow`, compare the returned group with the expected records, and inspect the
+/// file-content-based scan summary.
+///
+/// @par Expected results
+/// The scan returns exactly one duplicate group and reports recoverable bytes equal to the size of one retained
+/// duplicate copy.
 TEST_F(ScanByFileContentTest, CheckDuplicateGroups_SmokeTest)
 {
     const QString scanRootPath = getSmokeTestScanRootPath();
@@ -42,7 +54,18 @@ TEST_F(ScanByFileContentTest, CheckDuplicateGroups_SmokeTest)
     EXPECT_EQ(summary->getTotalAmountOfPotentiallyRecoverableBytes(), expectedRecoverableBytes);
 }
 
-/// Verifies that a successful content scan reports only the expected workflow phases and reports them in execution order.
+/// @brief Verifies the phase types and transition order reported by a successful file-content-based scan.
+///
+/// @par Test setup
+/// Use the smoke-test directory and collect every progress update emitted by `FileContentScanWorkflow`.
+///
+/// @par Procedure
+/// Execute the workflow, verify that every update contains a file-content phase, and reduce the updates to
+/// distinct phase transitions.
+///
+/// @par Expected results
+/// The phases appear only in this order: enumeration, equal-size candidate identification, hashing, exact-content
+/// verification, and result building.
 TEST_F(ScanByFileContentTest, CheckProgressPhases_SuccessfulScan)
 {
     QList<ScanProgress> progressUpdates;
@@ -64,7 +87,18 @@ TEST_F(ScanByFileContentTest, CheckProgressPhases_SuccessfulScan)
                   FileContentScanPhase::BuildingScanResult}));
 }
 
-/// Verifies that content-scan progress counters are monotonic within each phase and respect each phase's reported total.
+/// @brief Verifies progress counter semantics for a successful single-root file-content-based scan.
+///
+/// @par Test setup
+/// Create two identical four-byte files and one unique-size file, then collect every workflow progress update.
+///
+/// @par Procedure
+/// Execute the scan and inspect counters independently for enumeration, size checking, hashing, content
+/// verification, and result building.
+///
+/// @par Expected results
+/// Enumeration and size checking reach all three files; only the two equal-size candidates are hashed and
+/// verified; every phase is monotonic and bounded; result building reports `3/3`.
 TEST_F(ScanByFileContentTest, CheckProgressCounters_SuccessfulScan)
 {
     ASSERT_TRUE(writeFile("first/duplicate.bin", "same"));
@@ -140,11 +174,19 @@ TEST_F(ScanByFileContentTest, CheckProgressCounters_SuccessfulScan)
     EXPECT_TRUE(buildingResultPhaseWasReported);
 }
 
-/// Verifies that content-scan progress aggregates files from all roots instead of restarting at each new root.
-/// The first root contains 2 files and the second contains 3, so the test requires the exact enumeration sequence
-/// 0, 1, 2, 3, 4, 5 and an equal-size-check total ending at 5. The two 4-byte "same" files are the only candidates,
-/// so hashing and verification must each use a total ending at 2; all phase counts must be nondecreasing, and the
-/// final result update must report 5/5.
+/// @brief Verifies that file-content-based scan progress remains cumulative across multiple roots.
+///
+/// @par Test setup
+/// Create two files in the first root and three in the second. Only one cross-root pair has equal size and
+/// identical contents; collect all workflow progress updates.
+///
+/// @par Procedure
+/// Execute the workflow over both roots and inspect the enumeration, size-checking, hashing, verification, and
+/// result-building counters.
+///
+/// @par Expected results
+/// Enumeration reports `0` through `5` without restarting, size checking reaches five, hashing and verification
+/// each reach the two candidates, all counters are monotonic, and result building reports `5/5`.
 TEST_F(ScanByFileContentTest, CheckProgressCounters_MultipleRoots)
 {
     ASSERT_TRUE(writeFile("first-root/shared.txt", "same"));
@@ -224,7 +266,19 @@ TEST_F(ScanByFileContentTest, CheckProgressCounters_MultipleRoots)
     EXPECT_TRUE(buildingResultPhaseWasReported);
 }
 
-/// Verifies the exact file, directory, byte, duplicate, and recoverable-byte metrics for a controlled directory tree.
+/// @brief Verifies file-content-based scan summary metrics for a controlled nested directory tree.
+///
+/// @par Test setup
+/// Create two identical files in separate child directories and one unique file in the root. Calculate expected
+/// total, duplicate, and recoverable byte counts from their contents.
+///
+/// @par Procedure
+/// Execute the workflow, retrieve `FileContentScanSummary`, and inspect all directory, file, byte, duplicate, and
+/// recoverable-space counters.
+///
+/// @par Expected results
+/// The summary reports three directories, three files, the exact total bytes, one two-file duplicate group, its
+/// occupied bytes, and one duplicate file's size as potentially recoverable.
 TEST_F(ScanByFileContentTest, CheckSummaryMetrics_ControlledDirectoryTree)
 {
     const QByteArray duplicateContents("same");
@@ -254,10 +308,18 @@ TEST_F(ScanByFileContentTest, CheckSummaryMetrics_ControlledDirectoryTree)
     EXPECT_EQ(summary->getTotalAmountOfPotentiallyRecoverableBytes(), static_cast<quint64>(duplicateContents.size()));
 }
 
-/// Verifies that content-scan summary metrics combine directory, file, byte, duplicate, and recoverable totals from all roots.
-/// The two roots and their nested and deep subdirectories make 4 scanned directories; their 4 files occupy 4 + 3 + 4 + 5 = 16 bytes.
-/// shared.txt and shared.log form 1 duplicate group containing 2 files, whose two 4-byte contents occupy 8 bytes in total.
-/// Removing either duplicate would recover 4 bytes.
+/// @brief Verifies that file-content-based scan summary metrics aggregate all supplied roots.
+///
+/// @par Test setup
+/// Create two roots containing four directories and four files in total. Include one identical cross-root pair;
+/// all files occupy 16 bytes, the pair occupies eight, and removing one copy would recover four.
+///
+/// @par Procedure
+/// Execute the workflow over both roots and inspect every count stored in `FileContentScanSummary`.
+///
+/// @par Expected results
+/// The summary reports four directories, four files, 16 scanned bytes, one two-file duplicate group occupying
+/// eight bytes, and four potentially recoverable bytes.
 TEST_F(ScanByFileContentTest, CheckSummaryMetrics_MultipleRoots)
 {
     ASSERT_TRUE(writeFile("first-root/nested/shared.txt", "same"));
@@ -286,7 +348,17 @@ TEST_F(ScanByFileContentTest, CheckSummaryMetrics_MultipleRoots)
     EXPECT_EQ(summary->getTotalAmountOfPotentiallyRecoverableBytes(), 4);
 }
 
-/// Verifies that an active content scan can be cancelled after it has started enumerating files.
+/// @brief Verifies cancellation during file enumeration in a file-content-based scan.
+///
+/// @par Test setup
+/// Create two files and configure a progress callback to request stop after the first file is enumerated.
+///
+/// @par Procedure
+/// Execute the workflow with the callback-controlled stop token and record whether cancellation was requested.
+///
+/// @par Expected results
+/// Cancellation is requested during enumeration, the result outcome is `Cancelled`, and no duplicate groups are
+/// returned.
 TEST_F(ScanByFileContentTest, CheckCancelledOutcome_StopRequestedDuringFileEnumeration)
 {
     ASSERT_TRUE(writeFile("first.txt", "first file contents"));
@@ -315,7 +387,18 @@ TEST_F(ScanByFileContentTest, CheckCancelledOutcome_StopRequestedDuringFileEnume
     EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
 }
 
-/// Verifies that an active content scan can be cancelled after hashing has begun.
+/// @brief Verifies cancellation during candidate hashing in a file-content-based scan.
+///
+/// @par Test setup
+/// Create two identical files and configure a progress callback to request stop after the first candidate is
+/// hashed.
+///
+/// @par Procedure
+/// Execute the workflow with the callback-controlled stop token and record whether cancellation occurred in the
+/// hashing phase.
+///
+/// @par Expected results
+/// The stop request is made after hashing begins, the outcome is `Cancelled`, and no duplicate group is returned.
 TEST_F(ScanByFileContentTest, CheckCancelledOutcome_StopRequestedDuringHashing)
 {
     ASSERT_TRUE(writeFile("one", "same"));
@@ -342,7 +425,18 @@ TEST_F(ScanByFileContentTest, CheckCancelledOutcome_StopRequestedDuringHashing)
     EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
 }
 
-/// Verifies that three identical files form one group and that keeping one copy makes the other two files recoverable.
+/// @brief Verifies grouping and recoverable-space accounting for three identical files.
+///
+/// @par Test setup
+/// Write the same byte sequence to three differently named files and construct the expected three-file group.
+///
+/// @par Procedure
+/// Execute the file-content-based workflow, compare the group with the expected records, and inspect its summary
+/// metrics.
+///
+/// @par Expected results
+/// One group contains all three files, occupied duplicate bytes equal three file sizes, and recoverable bytes
+/// equal two file sizes because one copy must be retained.
 TEST_F(ScanByFileContentTest, CheckDuplicateGroups_ThreeIdenticalFiles)
 {
     const QByteArray duplicateContents("duplicate");
@@ -373,7 +467,19 @@ TEST_F(ScanByFileContentTest, CheckDuplicateGroups_ThreeIdenticalFiles)
     EXPECT_EQ(summary->getTotalAmountOfPotentiallyRecoverableBytes(), duplicateFileSize * 2);
 }
 
-/// Verifies correct grouping and summary metrics for large binary duplicates, empty files, and same-size files with different content.
+/// @brief Verifies grouping of large binary and empty files without treating equal size as proof of duplication.
+///
+/// @par Test setup
+/// Create two identical binary files larger than one MiB, one same-size file with different bytes, one unique-size
+/// file, and two empty files. Construct expected binary, empty, and invalid mixed-content groups.
+///
+/// @par Procedure
+/// Execute the file-content-based workflow, compare its groups with the expected partitions, and inspect duplicate
+/// and recoverable-byte summary metrics.
+///
+/// @par Expected results
+/// Exactly the identical binary pair and empty pair are reported. The different-content file is excluded, four
+/// files belong to duplicate groups, and only one large binary copy contributes recoverable bytes.
 TEST_F(ScanByFileContentTest, CheckBinaryAndEmptyDuplicateGroups_LargeAndEmptyFiles)
 {
     QByteArray duplicateBytes(1024 * 1024 + 31, 'A');
@@ -424,7 +530,19 @@ TEST_F(ScanByFileContentTest, CheckBinaryAndEmptyDuplicateGroups_LargeAndEmptyFi
     EXPECT_EQ(summary->getTotalAmountOfPotentiallyRecoverableBytes(), static_cast<quint64>(duplicateBytes.size()));
 }
 
-/// Verifies that equal-size files are separated by content hash while files with unique sizes are excluded from hashing.
+/// @brief Verifies size pruning, hash partitioning, and recoverable-byte accounting.
+///
+/// @par Test setup
+/// Create five four-byte files forming two duplicate pairs plus one same-size singleton, and one seven-byte
+/// unique-size file. Collect workflow progress and construct the expected groups.
+///
+/// @par Procedure
+/// Execute the workflow, inspect its groups, extract the final hashing counter and total, and inspect recoverable
+/// bytes.
+///
+/// @par Expected results
+/// Two exact-content groups are returned, the same-size singleton is excluded, all five four-byte candidates are
+/// hashed, the unique-size file is pruned, and eight bytes are recoverable.
 TEST_F(ScanByFileContentTest, CheckHashGroupingAndSizePruning_RepeatedAndUniqueSizeBuckets)
 {
     ASSERT_TRUE(writeFile("a/a-one", "AAAA"));
@@ -487,7 +605,19 @@ TEST_F(ScanByFileContentTest, CheckHashGroupingAndSizePruning_RepeatedAndUniqueS
     EXPECT_EQ(summary->getTotalAmountOfPotentiallyRecoverableBytes(), 8);
 }
 
-/// Verifies that one matching-hash bucket is split into exact-content groups instead of treating a hash collision as proof that all files are duplicates.
+/// @brief Verifies exact byte comparison when unrelated files share the same calculated hash.
+///
+/// @par Test setup
+/// Create two `AAAA` files, two `BBBB` files, and one `CCCC` file of equal size. Inject a hash calculator that
+/// returns the same artificial hash for every file.
+///
+/// @par Procedure
+/// Execute the workflow, compare the returned partitions with the two expected exact-content groups, and inspect
+/// duplicate and recoverable summary metrics.
+///
+/// @par Expected results
+/// The collision bucket is split into the two genuine duplicate pairs, the singleton is excluded, and the summary
+/// reports four grouped files with eight recoverable bytes.
 TEST_F(ScanByFileContentTest, CheckHashCollision_MatchingHashBucketIsPartitionedByExactContent)
 {
     ASSERT_TRUE(writeFile("a/first-a", "AAAA"));
@@ -531,7 +661,19 @@ TEST_F(ScanByFileContentTest, CheckHashCollision_MatchingHashBucketIsPartitioned
     EXPECT_EQ(summary->getTotalAmountOfPotentiallyRecoverableBytes(), 8);
 }
 
-/// Verifies that losing a collected hash candidate before it is read causes the content scan to fail.
+/// @brief Verifies failure when a collected candidate disappears before hashing.
+///
+/// @par Test setup
+/// Create two identical files and configure a progress callback to remove one candidate at the start of the
+/// hashing phase.
+///
+/// @par Procedure
+/// Execute the file-content-based workflow and record whether the candidate was removed before its contents could
+/// be hashed.
+///
+/// @par Expected results
+/// Removal succeeds, the workflow reports `Failed`, no unverified group is returned, and the discovery-time
+/// problematic-file count remains zero.
 TEST_F(ScanByFileContentTest, CheckFailedOutcome_CollectedCandidateRemovedBeforeHashing)
 {
     ASSERT_TRUE(writeFile("one", "same"));
@@ -560,7 +702,18 @@ TEST_F(ScanByFileContentTest, CheckFailedOutcome_CollectedCandidateRemovedBefore
     EXPECT_EQ(scanResult.getProblematicFilesCount(), 0);
 }
 
-/// Verifies that losing a matching-hash candidate after hashing but before byte comparison causes the content scan to fail rather than report an unverified duplicate.
+/// @brief Verifies failure when a matching-hash candidate disappears before exact byte comparison.
+///
+/// @par Test setup
+/// Create two identical files and configure a progress callback to remove one after both hashes are available but
+/// before content verification starts.
+///
+/// @par Procedure
+/// Execute the file-content-based workflow and record whether removal occurs at the initial verification update.
+///
+/// @par Expected results
+/// Removal succeeds, exact comparison failure produces `ScanOutcome::Failed`, no unverified group is returned,
+/// and the discovery-time problematic-file count remains zero.
 TEST_F(ScanByFileContentTest, CheckFailedOutcome_HashCandidateRemovedBeforeByteComparison)
 {
     ASSERT_TRUE(writeFile("one", "same"));

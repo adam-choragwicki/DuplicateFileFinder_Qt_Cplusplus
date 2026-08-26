@@ -12,7 +12,17 @@ namespace
     {};
 }
 
-/// Verifies that scanning the smoke-test file system scenario tree by file name returns the two expected duplicate groups and a file-name scan summary.
+/// @brief Verifies filename-based duplicate grouping against the maintained smoke-test directory tree.
+///
+/// @par Test setup
+/// Use the repository smoke-test tree and construct the expected three-file and two-file duplicate groups from
+/// their known paths and sizes.
+///
+/// @par Procedure
+/// Execute `FileNameScanWorkflow` over the smoke-test root and inspect its outcome, groups, and summary variant.
+///
+/// @par Expected results
+/// The scan completes with exactly the two expected groups and stores a `FileNameScanSummary` in the result.
 TEST_F(ScanByFileNameTest, CheckDuplicateGroups_SmokeTest)
 {
     const QString scanRootPath = getSmokeTestScanRootPath();
@@ -39,7 +49,19 @@ TEST_F(ScanByFileNameTest, CheckDuplicateGroups_SmokeTest)
     EXPECT_TRUE(std::holds_alternative<FileNameScanSummary>(scanResult.getScanSummaryDetails()));
 }
 
-/// Verifies that files with the same base name are grouped when only their final extensions differ.
+/// @brief Verifies that filename matching ignores the final extension.
+///
+/// @par Test setup
+/// Create `report.txt` and `report.pdf` with different contents and sizes in separate directories, plus an
+/// unrelated file, and construct the expected report group.
+///
+/// @par Procedure
+/// Execute the filename-based workflow over the temporary root and compare the returned group with the expected
+/// file records.
+///
+/// @par Expected results
+/// The scan completes with exactly one duplicate group containing both report files; the unrelated file is not
+/// grouped.
 TEST_F(ScanByFileNameTest, CheckDuplicateGroups_FileNamesDifferOnlyByFinalExtension)
 {
     ASSERT_TRUE(writeFile("documents/report.txt", "text report"));
@@ -61,7 +83,18 @@ TEST_F(ScanByFileNameTest, CheckDuplicateGroups_FileNamesDifferOnlyByFinalExtens
     EXPECT_TRUE(containsDuplicateGroup(scanResult, expectedDuplicateGroup));
 }
 
-/// Verifies that file-name matching ignores letter case on every operating system.
+/// @brief Verifies that filename matching is case-insensitive on every operating system.
+///
+/// @par Test setup
+/// Create `Report.txt` and `report.txt` in separate directories with different contents, plus an unrelated file,
+/// and construct the expected two-file group.
+///
+/// @par Procedure
+/// Execute the filename-based workflow and compare its only duplicate group with the expected records.
+///
+/// @par Expected results
+/// The differently cased names form one duplicate group independently of host filesystem case rules, while the
+/// unrelated file remains excluded.
 TEST_F(ScanByFileNameTest, CheckDuplicateGroups_FileNamesDifferOnlyByLetterCase)
 {
     ASSERT_TRUE(writeFile("first/Report.txt", "first"));
@@ -81,7 +114,17 @@ TEST_F(ScanByFileNameTest, CheckDuplicateGroups_FileNamesDifferOnlyByLetterCase)
     EXPECT_TRUE(containsDuplicateGroup(scanResult, expectedDuplicateGroup));
 }
 
-/// Verifies that equal extensionless file names are grouped without requiring a dot or extension.
+/// @brief Verifies matching of equal filenames that have no extension.
+///
+/// @par Test setup
+/// Create two extensionless `LICENSE` files with different contents and sizes, plus an extensionless `README`,
+/// and construct the expected LICENSE group.
+///
+/// @par Procedure
+/// Execute the filename-based workflow and inspect its outcome and returned group.
+///
+/// @par Expected results
+/// Exactly one duplicate group contains both LICENSE files, and README is excluded.
 TEST_F(ScanByFileNameTest, CheckDuplicateGroups_ExtensionlessFileNames)
 {
     ASSERT_TRUE(writeFile("first/LICENSE", "first license"));
@@ -103,7 +146,17 @@ TEST_F(ScanByFileNameTest, CheckDuplicateGroups_ExtensionlessFileNames)
     EXPECT_TRUE(containsDuplicateGroup(scanResult, expectedDuplicateGroup));
 }
 
-/// Verifies that a leading dot marks a file name rather than an extension and does not merge unrelated hidden files.
+/// @brief Verifies that a leading dot is treated as part of a filename rather than as an extension separator.
+///
+/// @par Test setup
+/// Create two `.bashrc` files and one `.profile` file in separate directories, then construct the expected
+/// `.bashrc` group.
+///
+/// @par Procedure
+/// Execute the filename-based workflow and compare its returned group with the expected hidden files.
+///
+/// @par Expected results
+/// Both `.bashrc` files form the only duplicate group; `.profile` is not incorrectly merged into it.
 TEST_F(ScanByFileNameTest, CheckDuplicateGroups_LeadingDotFileNamesAreNotExtensions)
 {
     ASSERT_TRUE(writeFile("first/.bashrc", "first settings"));
@@ -125,7 +178,18 @@ TEST_F(ScanByFileNameTest, CheckDuplicateGroups_LeadingDotFileNamesAreNotExtensi
     EXPECT_TRUE(containsDuplicateGroup(scanResult, expectedDuplicateGroup));
 }
 
-/// Verifies that only the final extension is ignored when comparing file names containing multiple dots.
+/// @brief Verifies that matching removes only the suffix after the final dot.
+///
+/// @par Test setup
+/// Create `archive.tar.gz`, `archive.tar.zip`, and `archive.zip` with different contents and construct the
+/// expected group containing the two `archive.tar` variants.
+///
+/// @par Procedure
+/// Execute the filename-based workflow and inspect the single duplicate group.
+///
+/// @par Expected results
+/// The two `archive.tar.*` files are grouped after their final extensions are removed, while `archive.zip` keeps
+/// the different comparison key `archive` and is excluded.
 TEST_F(ScanByFileNameTest, CheckDuplicateGroups_OnlyFinalExtensionIsIgnored)
 {
     ASSERT_TRUE(writeFile("first/archive.tar.gz", "gzip archive"));
@@ -147,7 +211,18 @@ TEST_F(ScanByFileNameTest, CheckDuplicateGroups_OnlyFinalExtensionIsIgnored)
     EXPECT_TRUE(containsDuplicateGroup(scanResult, expectedDuplicateGroup));
 }
 
-/// Verifies that a successful file-name scan reports only the expected workflow phases and reports them in execution order.
+/// @brief Verifies the phase types and transition order reported by a successful filename-based scan.
+///
+/// @par Test setup
+/// Use the smoke-test directory and collect every progress update emitted by `FileNameScanWorkflow`.
+///
+/// @par Procedure
+/// Execute the workflow, verify that every update contains a filename-scan phase, and reduce the updates to
+/// distinct phase transitions.
+///
+/// @par Expected results
+/// The scan succeeds and reports only `EnumeratingFiles`, `GroupingFilesByName`, and `BuildingScanResult`, in
+/// that order.
 TEST_F(ScanByFileNameTest, CheckProgressPhases_SuccessfulScan)
 {
     QList<ScanProgress> progressUpdates;
@@ -167,7 +242,18 @@ TEST_F(ScanByFileNameTest, CheckProgressPhases_SuccessfulScan)
                   FileNameScanPhase::BuildingScanResult}));
 }
 
-/// Verifies that file-name scan progress counters are monotonic within each phase and finish at the known file total.
+/// @brief Verifies progress counter semantics for a successful single-root filename-based scan.
+///
+/// @par Test setup
+/// Create two matching files and one unique file, then collect all progress updates from the workflow.
+///
+/// @par Procedure
+/// Execute the scan and inspect enumeration, grouping, and result-building counters independently for totals,
+/// monotonicity, and bounds.
+///
+/// @par Expected results
+/// Enumeration advances to three with an unknown total, grouping advances monotonically to three with a known
+/// total, and the final result-building update reports `3/3`.
 TEST_F(ScanByFileNameTest, CheckProgressCounters_SuccessfulScan)
 {
     ASSERT_TRUE(writeFile("first/shared.txt", "same"));
@@ -222,10 +308,19 @@ TEST_F(ScanByFileNameTest, CheckProgressCounters_SuccessfulScan)
     EXPECT_TRUE(buildingResultPhaseWasReported);
 }
 
-/// Verifies that file-name scan progress counters remain cumulative while enumeration advances across multiple roots.
-/// Cumulative means that the processed-files count continues from the first root's 2 files while the second
-/// root's 3 files are enumerated, rather than restarting at 0.
-/// The test requires the exact enumeration sequence 0, 1, 2, 3, 4, 5, nondecreasing grouping counts bounded by the total of five, and a final result update of 5/5.
+/// @brief Verifies that filename-scan progress remains cumulative across multiple roots.
+///
+/// @par Test setup
+/// Create two files in the first root and three in the second, including one cross-root duplicate pair, and
+/// collect all workflow progress updates.
+///
+/// @par Procedure
+/// Execute the workflow over both roots and separately inspect enumeration counts, grouping counters, and the
+/// final result-building update.
+///
+/// @par Expected results
+/// Enumeration reports exactly `0, 1, 2, 3, 4, 5` without restarting at the second root, grouping reaches five
+/// monotonically, and result building reports `5/5`.
 TEST_F(ScanByFileNameTest, CheckProgressCounters_MultipleRoots)
 {
     ASSERT_TRUE(writeFile("first-root/shared.txt", "same"));
@@ -284,7 +379,19 @@ TEST_F(ScanByFileNameTest, CheckProgressCounters_MultipleRoots)
     EXPECT_TRUE(buildingResultPhaseWasReported);
 }
 
-/// Verifies the exact file, directory, byte, and duplicate metrics reported for a controlled nested directory tree.
+/// @brief Verifies filename-scan summary metrics for a controlled nested directory tree.
+///
+/// @par Test setup
+/// Create two matching files in separate child directories and one unique file in the root. Calculate the
+/// expected total and duplicate byte counts from their contents.
+///
+/// @par Procedure
+/// Execute the workflow, retrieve its `FileNameScanSummary`, and inspect all directory, file, byte, and duplicate
+/// counters.
+///
+/// @par Expected results
+/// The summary reports three directories, three files, the exact total bytes, one two-file duplicate group, and
+/// the exact bytes occupied by that group.
 TEST_F(ScanByFileNameTest, CheckSummaryMetrics_ControlledDirectoryTree)
 {
     const QByteArray duplicateContents("same");
@@ -313,9 +420,18 @@ TEST_F(ScanByFileNameTest, CheckSummaryMetrics_ControlledDirectoryTree)
     EXPECT_EQ(summary->getTotalBytesOccupiedByFilesInDuplicateGroups(), expectedDuplicateBytes);
 }
 
-/// Verifies that file-name summary metrics combine directory, file, byte, and duplicate totals from all roots.
-/// The two roots and their nested and deep subdirectories make 4 scanned directories; their 4 files occupy 4 + 3 + 4 + 5 = 16 bytes.
-/// shared.txt and shared.log form 1 duplicate group containing 2 files, whose two 4-byte contents occupy 8 bytes in total.
+/// @brief Verifies that filename-scan summary metrics aggregate all supplied roots.
+///
+/// @par Test setup
+/// Create two roots containing four directories and four files in total. Include one cross-root pair with the
+/// same base name; the files occupy 16 bytes overall and the duplicate pair occupies eight.
+///
+/// @par Procedure
+/// Execute the workflow over both roots and inspect every count stored in `FileNameScanSummary`.
+///
+/// @par Expected results
+/// The summary reports four directories, four files, 16 scanned bytes, and one two-file duplicate group occupying
+/// eight bytes.
 TEST_F(ScanByFileNameTest, CheckSummaryMetrics_MultipleRoots)
 {
     ASSERT_TRUE(writeFile("first-root/nested/shared.txt", "same"));
@@ -343,7 +459,17 @@ TEST_F(ScanByFileNameTest, CheckSummaryMetrics_MultipleRoots)
     EXPECT_EQ(summary->getTotalBytesOccupiedByFilesInDuplicateGroups(), 8);
 }
 
-/// Verifies that an active file-name scan can be cancelled after it has started enumerating files.
+/// @brief Verifies cancellation during filename-scan file enumeration.
+///
+/// @par Test setup
+/// Create two files and configure a progress callback to request stop after the first file is enumerated.
+///
+/// @par Procedure
+/// Execute the workflow with the callback-controlled stop token and record whether the request was made.
+///
+/// @par Expected results
+/// The callback requests cancellation during enumeration, the result outcome is `Cancelled`, and no duplicate
+/// groups are returned.
 TEST_F(ScanByFileNameTest, CheckCancelledOutcome_StopRequestedDuringFileEnumeration)
 {
     ASSERT_TRUE(writeFile("first.txt", "first file contents"));
