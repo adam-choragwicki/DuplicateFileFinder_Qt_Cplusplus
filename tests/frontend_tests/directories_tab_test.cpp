@@ -3,6 +3,7 @@
 #include <QComboBox>
 #include <QDir>
 #include <QFile>
+#include <QLabel>
 #include <QPushButton>
 #include <QTemporaryDir>
 #include <QTreeWidget>
@@ -25,33 +26,38 @@ namespace
     }
 }
 
-/// @brief Verifies that each scan-type choice maps to the value exposed by `MainWindow`.
+/// @brief Verifies that each scan-type choice maps to the expected value and explanatory description.
 ///
 /// @par Test setup
-/// Construct `MainWindow` and locate the scan-type combo box populated during initialization.
+/// Construct `MainWindow` and locate the scan-type combo box and description label populated during initialization.
 ///
 /// @par Procedure
-/// Inspect the available labels, select each entry in turn, and call `MainWindow::getScanType()` after every
-/// selection.
+/// Inspect the available labels, select each entry in turn, call `MainWindow::getScanType()`, and read the
+/// description shown below the selector after every selection.
 ///
 /// @par Expected results
 /// - The combo box contains only “By file name” and “By file content”; no Designer placeholders remain.
 /// - Selecting each entry returns `ScanType::ByFileName` or `ScanType::ByFileContent`, respectively.
+/// - Each selection displays a concise description of the corresponding scan behavior.
 TEST(DirectoriesTabTest, ReturnSelectedScanType_WhenScanTypeSelectionChanges)
 {
     MainWindow mainWindow;
     auto* scanTypeComboBox = mainWindow.findChild<QComboBox*>(QStringLiteral("scanType_ComboBox"));
+    const auto* scanTypeDescriptionLabel = mainWindow.findChild<QLabel*>(QStringLiteral("scanTypeDescription_Label"));
 
     ASSERT_NE(scanTypeComboBox, nullptr);
+    ASSERT_NE(scanTypeDescriptionLabel, nullptr);
     ASSERT_EQ(scanTypeComboBox->count(), 2);
     EXPECT_EQ(scanTypeComboBox->itemText(0).toStdString(), std::string("By file name"));
     EXPECT_EQ(scanTypeComboBox->itemText(1).toStdString(), std::string("By file content"));
 
     scanTypeComboBox->setCurrentIndex(0);
     EXPECT_EQ(mainWindow.getScanType(), ScanType::ByFileName);
+    EXPECT_EQ(scanTypeDescriptionLabel->text().toStdString(), std::string("Finds files with matching names, ignoring letter case and the final extension. Their contents may differ."));
 
     scanTypeComboBox->setCurrentIndex(1);
     EXPECT_EQ(mainWindow.getScanType(), ScanType::ByFileContent);
+    EXPECT_EQ(scanTypeDescriptionLabel->text().toStdString(), std::string("Finds files with exactly identical contents, regardless of their names."));
 }
 
 /// @brief Verifies that adding a directory creates one normalized top-level scan root.

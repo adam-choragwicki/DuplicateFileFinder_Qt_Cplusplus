@@ -4,6 +4,7 @@
 #include <QClipboard>
 #include <QHeaderView>
 #include <QKeyEvent>
+#include <QLocale>
 #include <QMenu>
 #include <QTableWidget>
 #include <QTimer>
@@ -20,6 +21,35 @@ namespace
 
     /// @brief Zero-based index of the results-table column containing file sizes.
     constexpr int sizesColumn = 2;
+
+    /// @brief Temporarily replaces Qt's default locale and restores it when the current scope ends.
+    ///
+    /// File-size text is intentionally localized by the application. Tests that verify exact strings use this
+    /// guard to make decimal separators and unit formatting deterministic on every development and CI machine.
+    class ScopedDefaultLocale
+    {
+    public:
+        /// @brief Stores the current default locale and installs the requested locale.
+        ///
+        /// @param locale Locale to use until this object is destroyed.
+        explicit ScopedDefaultLocale(const QLocale& locale) : previousDefaultLocale_(QLocale())
+        {
+            QLocale::setDefault(locale);
+        }
+
+        /// @brief Restores the default locale that was active before construction.
+        ~ScopedDefaultLocale()
+        {
+            QLocale::setDefault(previousDefaultLocale_);
+        }
+
+        ScopedDefaultLocale(const ScopedDefaultLocale&) = delete;
+        ScopedDefaultLocale& operator=(const ScopedDefaultLocale&) = delete;
+
+    private:
+        /// @brief Default locale to restore when this guard leaves scope.
+        QLocale previousDefaultLocale_;
+    };
 
     /// @brief Creates a duplicate group from file records supplied in their intended display order.
     ///
@@ -164,12 +194,14 @@ namespace
 ///
 /// @par Expected results
 /// - The table contains five rows and the three expected columns.
+/// - The size column is labelled `Size`.
 /// - Groups are displayed in ascending reference-filename order, with files remaining in their groups.
-/// - Every row contains the expected filename, directory, and byte size divided by 1024 and formatted with two decimals.
+/// - Every row contains the expected filename, directory, and adaptively formatted file size.
 /// - Each filename item stores the file's absolute path in `Qt::UserRole`.
 /// - Only reference-file rows display their one-based duplicate-group number.
 TEST(ResultsTabTest, PopulateTable_WhenDuplicateGroupsAreShown)
 {
+    const ScopedDefaultLocale defaultLocale{QLocale::c()};
     ResultsTab resultsTab;
 
     const FileRecord twoFileGroupReference{QStringLiteral("first.txt"), QStringLiteral("C:/references/first"), 1536};
@@ -189,17 +221,24 @@ TEST(ResultsTabTest, PopulateTable_WhenDuplicateGroupsAreShown)
                                           twoFileGroupDuplicate,
                                           threeFileGroupReference,
                                           threeFileGroupDuplicateOne,
-                                          threeFileGroupDuplicateTwo
-    };
+                                          threeFileGroupDuplicateTwo};
+
     const QStringList expectedGroupNumbers{QStringLiteral("1"),
                                            QString{},
                                            QStringLiteral("2"),
                                            QString{},
-                                           QString{}
-    };
+                                           QString{}};
+
+    const QStringList expectedDisplaySizes{QStringLiteral("1.50 kB"),
+                                           QStringLiteral("2.00 kB"),
+                                           QStringLiteral("3.00 kB"),
+                                           QStringLiteral("512 B"),
+                                           QStringLiteral("1.00 kB")};
 
     ASSERT_EQ(resultsTable->rowCount(), expectedFiles.size());
     ASSERT_EQ(resultsTable->columnCount(), 3);
+    ASSERT_NE(resultsTable->horizontalHeaderItem(sizesColumn), nullptr);
+    EXPECT_EQ(resultsTable->horizontalHeaderItem(sizesColumn)->text().toStdString(), std::string("Size"));
 
     for (int row = 0; row < resultsTable->rowCount(); ++row)
     {
@@ -218,9 +257,62 @@ TEST(ResultsTabTest, PopulateTable_WhenDuplicateGroupsAreShown)
 
         EXPECT_EQ(fileNameItem->text().toStdString(), expectedFile.getFileName().toStdString());
         EXPECT_EQ(directoryItem->text().toStdString(), expectedFile.getDirectoryPath().toStdString());
-        EXPECT_EQ(sizeItem->text().toStdString(), QString::number(expectedFile.getSizeBytes() / 1024.0, 'f', 2).toStdString());
+        EXPECT_EQ(sizeItem->text().toStdString(), expectedDisplaySizes.at(row).toStdString());
         EXPECT_EQ(fileNameItem->data(Qt::UserRole).toString().toStdString(), expectedFile.getAbsoluteFilePath().toStdString());
         EXPECT_EQ(groupNumberItem->text().toStdString(), expectedGroupNumbers.at(row).toStdString());
+    }
+}
+
+/// @brief Verifies that displayed file sizes select an appropriate unit for their magnitude.
+///
+/// @par Test setup
+/// Fix Qt's default locale to the C locale and create one duplicate group containing file sizes represented
+/// most naturally as bytes, kilobytes, megabytes, gigabytes, and terabytes.
+///
+/// @par Procedure
+/// Display the duplicate group, read the size item from every generated row, and compare its text with the
+/// complete expected value and unit.
+///
+/// @par Expected results
+/// - A sub-kilobyte value is displayed as an integer followed by `B`.
+/// - Larger values are scaled to kB, MB, GB, or TB as appropriate.
+/// - Scaled values retain two decimal places.
+TEST(ResultsTabTest, DisplayAdaptiveFileSizeUnits_WhenFileSizesSpanMultipleUnits)
+{
+    const ScopedDefaultLocale defaultLocale{QLocale::c()};
+    ResultsTab resultsTab;
+
+    constexpr qint64 kibibyte = 1024;
+    constexpr qint64 mebibyte = kibibyte * 1024;
+    constexpr qint64 gibibyte = mebibyte * 1024;
+    constexpr qint64 tebibyte = gibibyte * 1024;
+
+    const DuplicateGroup duplicateGroup = createDuplicateGroup({FileRecord{QStringLiteral("bytes.bin"), QStringLiteral("C:/sizes"), 512},
+                                                                FileRecord{QStringLiteral("kilobytes.bin"), QStringLiteral("C:/sizes"), kibibyte + kibibyte / 2},
+                                                                FileRecord{QStringLiteral("megabytes.bin"), QStringLiteral("C:/sizes"), 2 * mebibyte},
+                                                                FileRecord{QStringLiteral("gigabytes.bin"), QStringLiteral("C:/sizes"), 3 * gibibyte},
+                                                                FileRecord{QStringLiteral("terabytes.bin"), QStringLiteral("C:/sizes"), 4 * tebibyte}});
+
+    resultsTab.showDuplicateGroups({duplicateGroup});
+
+    const auto* resultsTable = resultsTab.findChild<QTableWidget*>(QStringLiteral("results_TableWidget"));
+    ASSERT_NE(resultsTable, nullptr);
+
+    const QStringList expectedDisplaySizes{QStringLiteral("512 B"),
+                                           QStringLiteral("1.50 kB"),
+                                           QStringLiteral("2.00 MB"),
+                                           QStringLiteral("3.00 GB"),
+                                           QStringLiteral("4.00 TB")};
+    ASSERT_EQ(resultsTable->rowCount(), expectedDisplaySizes.size());
+
+    for (int row = 0; row < resultsTable->rowCount(); ++row)
+    {
+        // On failure, GoogleTest adds "Result row <index>" to identify the incorrectly formatted size.
+        SCOPED_TRACE(testing::Message() << "Result row " << row);
+        const QTableWidgetItem* sizeItem = resultsTable->item(row, sizesColumn);
+
+        ASSERT_NE(sizeItem, nullptr);
+        EXPECT_EQ(sizeItem->text().toStdString(), expectedDisplaySizes.at(row).toStdString());
     }
 }
 

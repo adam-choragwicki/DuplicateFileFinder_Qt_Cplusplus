@@ -43,9 +43,11 @@ public:
     [[nodiscard]] const QList<DuplicateGroup>& getDisplayedDuplicateGroups() const;
 
 private:
+    void initializeWindowGeometry();
     void initializeUI();
     void initializeDirectoriesTree(); // TODO move it out of this class
     void populateScanTypeComboBox();
+    void updateScanTypeDescription() const;
     void populateDirectoryTreeItem(QTreeWidgetItem* directoryItem) const; // TODO move it out of this class
     void showAboutDialog();
 

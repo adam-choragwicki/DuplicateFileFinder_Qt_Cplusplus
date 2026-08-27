@@ -5,6 +5,7 @@
 #include <QComboBox>
 #include <QDir>
 #include <QMessageBox>
+#include <QScreen>
 #include <QTabBar>
 #include <QToolButton>
 
@@ -14,6 +15,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     setWindowTitle("Duplicate file finder");
 
+    initializeWindowGeometry();
     initializeUI();
 
     connect(ui->addDirectory_PushButton, &QPushButton::clicked, this, &MainWindow::addDirectoryButtonClicked);
@@ -27,11 +29,39 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     connect(ui->directories_TreeWidget, &QTreeWidget::itemExpanded, this, &MainWindow::populateDirectoryTreeItem);
     connect(ui->directories_TreeWidget, &QTreeWidget::itemSelectionChanged, this, &MainWindow::updateDirectoryActionStates);
+    connect(ui->scanType_ComboBox, &QComboBox::currentIndexChanged, this, &MainWindow::updateScanTypeDescription);
 }
 
 MainWindow::~MainWindow()
 {
     delete ui;
+}
+
+void MainWindow::initializeWindowGeometry()
+{
+    constexpr int initialScreenWidthPercentage = 75;
+    constexpr int initialScreenHeightPercentage = 75;
+
+    const QScreen* initialScreen = QGuiApplication::primaryScreen();
+    if (!initialScreen)
+    {
+        // A GUI application normally has a primary screen. Keep a usable fallback for unusual platform
+        // integrations or tests that provide no screen geometry.
+        resize(800, 500);
+        return;
+    }
+
+    // availableGeometry() excludes desktop-reserved areas such as the taskbar or system dock. Qt expresses it
+    // in device-independent pixels, so the percentage remains appropriate when display scaling is enabled.
+    const QRect availableGeometry = initialScreen->availableGeometry();
+
+    const QSize initialSize{availableGeometry.width() * initialScreenWidthPercentage / 100,
+                            availableGeometry.height() * initialScreenHeightPercentage / 100};
+
+    resize(initialSize);
+
+    // Position the initial window in the center of the usable screen area.
+    move(availableGeometry.center() - QPoint(initialSize.width() / 2, initialSize.height() / 2));
 }
 
 void MainWindow::initializeUI()
@@ -67,6 +97,22 @@ void MainWindow::populateScanTypeComboBox()
     }
 
     ui->scanType_ComboBox->setCurrentIndex(0); // choose "By file name"
+    updateScanTypeDescription();
+}
+
+void MainWindow::updateScanTypeDescription() const
+{
+    switch (getScanType())
+    {
+        case ScanType::ByFileName:
+            ui->scanTypeDescription_Label->setText(QStringLiteral("Finds files with matching names, ignoring letter case and the final extension. "
+                "Their contents may differ."));
+            break;
+
+        case ScanType::ByFileContent:
+            ui->scanTypeDescription_Label->setText(QStringLiteral("Finds files with exactly identical contents, regardless of their names."));
+            break;
+    }
 }
 
 void MainWindow::showAboutDialog()

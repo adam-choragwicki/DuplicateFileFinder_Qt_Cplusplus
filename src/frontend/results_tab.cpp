@@ -39,6 +39,18 @@ namespace
         return item;
     }
 
+    [[nodiscard]] QString formatFileSize(const qint64 sizeBytes)
+    {
+        const QLocale locale;
+
+        if (sizeBytes < 1024)
+        {
+            return QStringLiteral("%1 B").arg(locale.toString(sizeBytes));
+        }
+
+        return locale.formattedDataSize(sizeBytes, 2, QLocale::DataSizeTraditionalFormat);
+    }
+
     int compareReferenceFiles(const FileRecord& leftFile, const FileRecord& rightFile, const int column, const QCollator& collator)
     {
         switch (column)
@@ -262,13 +274,18 @@ void ResultsTab::rebuildResultsTable()
             QTableWidgetItem* fileNameItem = createResultItem(file.getFileName(), tableFont, isReferenceFile);
             fileNameItem->setData(Qt::UserRole, file.getAbsoluteFilePath());
 
+            QTableWidgetItem* sizeItem = createResultItem(formatFileSize(file.getSizeBytes()),
+                                                          tableFont,
+                                                          isReferenceFile);
+
+            sizeItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
             auto* rowNumberItem = new QTableWidgetItem(isReferenceFile ? QString::number(groupIndex + 1) : QString{});
             rowNumberItem->setTextAlignment(Qt::AlignCenter);
 
             ui->results_TableWidget->setVerticalHeaderItem(row, rowNumberItem);
             ui->results_TableWidget->setItem(row, fileNameColumn, fileNameItem);
             ui->results_TableWidget->setItem(row, directoriesColumn, createResultItem(file.getDirectoryPath(), tableFont, isReferenceFile));
-            ui->results_TableWidget->setItem(row, sizesColumn, createResultItem(QString::number(file.getSizeBytes() / 1024.0, 'f', 2), tableFont, isReferenceFile));
+            ui->results_TableWidget->setItem(row, sizesColumn, sizeItem);
 
             ++row;
         }

@@ -28,7 +28,7 @@
      </column>
      <column>
       <property name="text">
-       <string>Sizes (KB)</string>
+       <string>Size</string>
       </property>
      </column>
     </widget>
