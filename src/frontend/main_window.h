@@ -27,16 +27,21 @@ signals:
     void exportToHtmlRequested();
     void revealFileInSystemFileManagerRequested(const QString& absoluteFilePath);
     void startScanButtonClicked();
+    void scanTypeSelectionChanged(ScanType scanType);
+    void scanResultCloseRequested();
     void quitButtonClicked();
 
 public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
 
-    [[nodiscard]] ScanType getScanType() const;
+    [[nodiscard]] ScanType getScanTypeFromComboBox() const;
+    void setScanTypeInComboBox(ScanType scanType);
     void showScanResult(const ScanResult& scanResult);
     void clearScanResult();
     [[nodiscard]] QStringList getScanDirectoryPaths() const; /// Get all of top level paths in directories tree
+    [[nodiscard]] QString getSelectedScanDirectoryPath() const;
+    void setScanDirectoryPaths(const QStringList& directoryPaths);
     void addScanDirectory(const QString& directoryPath);
     void removeScanDirectory(const QString& directoryPath);
     void removeSelectedScanDirectory();

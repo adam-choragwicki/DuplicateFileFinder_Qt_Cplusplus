@@ -20,22 +20,36 @@ Controller::Controller(Model& model, MainWindow& view) : model_(model), view_(vi
     connect(&view_, &MainWindow::startScanButtonClicked, this, &Controller::onStartScanButtonClicked);
     connect(&view_, &MainWindow::addDirectoryButtonClicked, this, &Controller::onAddDirectoryButtonClicked);
     connect(&view_, &MainWindow::removeDirectoryButtonClicked, this, &Controller::onRemoveDirectoryButtonClicked);
+    connect(&view_, &MainWindow::scanTypeSelectionChanged, &model_, &Model::setScanType);
+    connect(&view_, &MainWindow::scanResultCloseRequested, &model_, &Model::clearScanResult);
     connect(&view_, &MainWindow::exportToHtmlRequested, this, &Controller::onExportToHtmlRequested);
     connect(&view_, &MainWindow::revealFileInSystemFileManagerRequested, this, &Controller::revealFileInSystemFileManager);
+
+    connect(&model_, &Model::scanDirectoryPathsChanged, &view_, &MainWindow::setScanDirectoryPaths);
+    connect(&model_, &Model::scanTypeChanged, &view_, &MainWindow::setScanTypeInComboBox);
+    connect(&model_, &Model::scanResultChanged, this, &Controller::onScanResultChanged);
+
     connect(&scanner_, &Scanner::progressChanged, this, &Controller::onScanProgressChanged);
     connect(&scanner_, &Scanner::scanComplete, this, &Controller::onScanOperationComplete);
     connect(&scanner_, &Scanner::scanCancelled, this, &Controller::onScanOperationCancelled);
+
+    view_.setScanDirectoryPaths(model_.getScanDirectoryPaths());
+    view_.setScanTypeInComboBox(model_.getScanType());
+
+    onScanResultChanged();
 }
 
 void Controller::onExportToHtmlRequested()
 {
-    const QList<DuplicateGroup>& duplicateGroups = view_.getDisplayedDuplicateGroups();
+    const std::optional<ScanResult>& latestScanResult = model_.getLatestScanResult();
 
-    if (duplicateGroups.isEmpty())
+    if (!latestScanResult.has_value() || latestScanResult->getDuplicateGroups().isEmpty())
     {
         QMessageBox::warning(&view_, "Export failed", "There are no scan results to export.");
         return;
     }
+
+    const QList<DuplicateGroup>& duplicateGroups = latestScanResult->getDuplicateGroups();
 
     const QString outputFilePath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("duplicate_file_finder_results.html"));
     QString errorMessage;
@@ -62,28 +76,26 @@ void Controller::onExportToHtmlRequested()
 
 void Controller::onStartScanButtonClicked()
 {
-    // Results describe only the most recently completed scan. Invalidate the previous result
-    // before starting new work so it cannot be viewed or exported while this scan is in progress.
-    view_.clearScanResult();
-
-    if (scanner_.isScanning())
+    switch (model_.beginScan())
     {
-        return;
+        case Model::ScanStartOutcome::Started:
+            showScanProgressDialog();
+            scanner_.scan(ScanRequest(model_.getScanDirectoryPaths(), model_.getScanType()));
+            return;
+
+        case Model::ScanStartOutcome::AlreadyScanning:
+            return;
+
+        case Model::ScanStartOutcome::NoDirectoriesSelected:
+            QMessageBox::information(
+                &view_,
+                "Nothing to scan",
+                "Nothing to scan. No directories selected.");
     }
+}
 
-    const QStringList scanDirectoryPaths = view_.getScanDirectoryPaths();
-
-    if (scanDirectoryPaths.isEmpty())
-    {
-        QMessageBox::information(
-            &view_,
-            "Nothing to scan",
-            "Nothing to scan. No directories selected.");
-        return;
-    }
-
-    const ScanRequest scanRequest(scanDirectoryPaths, view_.getScanType());
-
+void Controller::showScanProgressDialog()
+{
     scanProgressDialog_ = new QProgressDialog("Preparing scan...",
                                               "Cancel",
                                               0,
@@ -102,8 +114,6 @@ void Controller::onStartScanButtonClicked()
     // never leave the user looking at an unchanged main window after clicking Start scan.
     scanProgressDialog_->show();
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
-
-    scanner_.scan(scanRequest);
 }
 
 void Controller::onAddDirectoryButtonClicked()
@@ -117,76 +127,35 @@ void Controller::onAddDirectoryButtonClicked()
         return;
     }
 
-    const QString normalizedDirectoryPath = normalizeDirectoryPath(directoryPath);
-    const QStringList existingDirectoryPaths = view_.getScanDirectoryPaths();
+    const Model::AddScanDirectoryResult addScanDirectoryResult = model_.addScanDirectory(directoryPath);
 
-    for (const QString& existingDirectoryPath: existingDirectoryPaths)
+    switch (addScanDirectoryResult.outcome)
     {
-        if (isSameDirectoryOrSubdirectoryOf(normalizedDirectoryPath, existingDirectoryPath))
-        {
+        case Model::AddScanDirectoryOutcome::Added:
+        case Model::AddScanDirectoryOutcome::InvalidPath:
+            return;
+
+        case Model::AddScanDirectoryOutcome::AlreadyIncluded:
             QMessageBox::information(&view_,
                                      "Directory already included",
                                      QStringLiteral("Directory \"%1\" is already in the list because it is covered by \"%2\".")
                                      .arg(
-                                         QDir::toNativeSeparators(normalizedDirectoryPath),
-                                         QDir::toNativeSeparators(existingDirectoryPath)));
-            return;
-        }
+                                         QDir::toNativeSeparators(addScanDirectoryResult.normalizedDirectoryPath),
+                                         QDir::toNativeSeparators(addScanDirectoryResult.coveringDirectoryPath)));
     }
-
-    // A newly selected parent replaces every existing scan root contained inside it. Scanning
-    // both would enumerate the nested root twice and could report the same file more than once.
-    for (const QString& existingDirectoryPath: existingDirectoryPaths)
-    {
-        if (isSameDirectoryOrSubdirectoryOf(existingDirectoryPath, normalizedDirectoryPath))
-        {
-            view_.removeScanDirectory(existingDirectoryPath);
-        }
-    }
-
-    view_.addScanDirectory(normalizedDirectoryPath);
 }
 
 void Controller::onRemoveDirectoryButtonClicked()
 {
     qDebug() << "Remove directory clicked";
 
-    view_.removeSelectedScanDirectory();
-}
-
-QString Controller::normalizeDirectoryPath(const QString& directoryPath)
-{
-    return QDir::cleanPath(QDir::fromNativeSeparators(QDir(directoryPath).absolutePath()));
-}
-
-bool Controller::isSameDirectoryOrSubdirectoryOf(const QString& directoryPath, const QString& possibleParentDirectoryPath)
-{
-    const QString normalizedDirectoryPath = normalizeDirectoryPath(directoryPath);
-    const QString normalizedParentDirectoryPath = normalizeDirectoryPath(possibleParentDirectoryPath);
-
-#if defined(Q_OS_WIN)
-    constexpr Qt::CaseSensitivity pathCaseSensitivity = Qt::CaseInsensitive;
-#else
-    constexpr Qt::CaseSensitivity pathCaseSensitivity = Qt::CaseSensitive;
-#endif
-
-    if (normalizedDirectoryPath.compare(normalizedParentDirectoryPath, pathCaseSensitivity) == 0)
-    {
-        return true;
-    }
-
-    QString parentDirectoryPathPrefix = normalizedParentDirectoryPath;
-
-    if (!parentDirectoryPathPrefix.endsWith('/'))
-    {
-        parentDirectoryPathPrefix.append('/');
-    }
-
-    return normalizedDirectoryPath.startsWith(parentDirectoryPathPrefix, pathCaseSensitivity);
+    model_.removeScanDirectory(view_.getSelectedScanDirectoryPath());
 }
 
 void Controller::onScanProgressChanged(const ScanProgress& progress)
 {
+    model_.updateScanProgress(progress);
+
     if (!scanProgressDialog_)
     {
         return;
@@ -230,26 +199,27 @@ void Controller::onScanProgressChanged(const ScanProgress& progress)
     scanProgressDialog_->setLabelText(progressText);
 }
 
-void Controller::onScanOperationComplete(const ScanResult& scanResult)
+void Controller::onScanResultChanged()
 {
-    closeScanProgressDialog();
-
-    const quint64 problematicFilesCount = scanResult.getProblematicFilesCount();
-    const bool completedWithProblems = problematicFilesCount > 0
-                                       && scanResult.getOutcome() != ScanOutcome::Failed
-                                       && scanResult.getOutcome() != ScanOutcome::Cancelled;
-    const bool scanHasMeaningfulResults = scanResult.getOutcome() == ScanOutcome::CompletedWithDuplicates
-                                          && !scanResult.getDuplicateGroups().isEmpty();
-
-    if (scanHasMeaningfulResults)
+    if (model_.hasDuplicateResults())
     {
-        view_.showScanResult(scanResult);
+        view_.showScanResult(*model_.getLatestScanResult());
     }
     else
     {
         view_.clearScanResult();
     }
+}
 
+void Controller::onScanOperationComplete(const ScanResult& scanResult)
+{
+    closeScanProgressDialog();
+    model_.completeScan(scanResult);
+
+    const quint64 problematicFilesCount = scanResult.getProblematicFilesCount();
+    const bool completedWithProblems = problematicFilesCount > 0
+                                       && scanResult.getOutcome() != ScanOutcome::Failed
+                                       && scanResult.getOutcome() != ScanOutcome::Cancelled;
     switch (scanResult.getOutcome())
     {
         case ScanOutcome::CompletedWithDuplicates:
@@ -304,7 +274,7 @@ void Controller::onScanOperationComplete(const ScanResult& scanResult)
 void Controller::onScanOperationCancelled()
 {
     closeScanProgressDialog();
-    view_.clearScanResult();
+    model_.markScanCancelled();
 }
 
 void Controller::closeScanProgressDialog()

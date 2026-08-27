@@ -52,11 +52,11 @@ TEST(DirectoriesTabTest, ReturnSelectedScanType_WhenScanTypeSelectionChanges)
     EXPECT_EQ(scanTypeComboBox->itemText(1).toStdString(), std::string("By file content"));
 
     scanTypeComboBox->setCurrentIndex(0);
-    EXPECT_EQ(mainWindow.getScanType(), ScanType::ByFileName);
+    EXPECT_EQ(mainWindow.getScanTypeFromComboBox(), ScanType::ByFileName);
     EXPECT_EQ(scanTypeDescriptionLabel->text().toStdString(), std::string("Finds files with matching names, ignoring letter case and the final extension. Their contents may differ."));
 
     scanTypeComboBox->setCurrentIndex(1);
-    EXPECT_EQ(mainWindow.getScanType(), ScanType::ByFileContent);
+    EXPECT_EQ(mainWindow.getScanTypeFromComboBox(), ScanType::ByFileContent);
     EXPECT_EQ(scanTypeDescriptionLabel->text().toStdString(), std::string("Finds files with exactly identical contents, regardless of their names."));
 }
 

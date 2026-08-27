@@ -14,6 +14,7 @@ target_link_libraries(application_tests
         Qt6::Widgets
         app_backend
         app_frontend
+        test_helpers
 )
 
 include(GoogleTest)

@@ -9,6 +9,7 @@ target_link_libraries(frontend_tests
         PRIVATE
         GTest::gtest
         app_frontend
+        test_helpers
 )
 
 include(GoogleTest)

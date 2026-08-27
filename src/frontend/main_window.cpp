@@ -29,7 +29,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     connect(ui->directories_TreeWidget, &QTreeWidget::itemExpanded, this, &MainWindow::populateDirectoryTreeItem);
     connect(ui->directories_TreeWidget, &QTreeWidget::itemSelectionChanged, this, &MainWindow::updateDirectoryActionStates);
-    connect(ui->scanType_ComboBox, &QComboBox::currentIndexChanged, this, &MainWindow::updateScanTypeDescription);
+    connect(ui->scanType_ComboBox, &QComboBox::currentIndexChanged, this,
+            [this]
+            {
+                updateScanTypeDescription();
+                emit scanTypeSelectionChanged(getScanTypeFromComboBox());
+            });
 }
 
 MainWindow::~MainWindow()
@@ -102,7 +107,7 @@ void MainWindow::populateScanTypeComboBox()
 
 void MainWindow::updateScanTypeDescription() const
 {
-    switch (getScanType())
+    switch (getScanTypeFromComboBox())
     {
         case ScanType::ByFileName:
             ui->scanTypeDescription_Label->setText(QStringLiteral("Finds files with matching names, ignoring letter case and the final extension. "
@@ -165,11 +170,43 @@ QStringList MainWindow::getScanDirectoryPaths() const
     return directoryPaths;
 }
 
+QString MainWindow::getSelectedScanDirectoryPath() const
+{
+    const QList<QTreeWidgetItem*> selectedDirectoryItems = ui->directories_TreeWidget->selectedItems();
+    const QTreeWidgetItem* selectedDirectoryItem = selectedDirectoryItems.size() == 1
+                                                       ? selectedDirectoryItems.constFirst()
+                                                       : nullptr;
+
+    if (!selectedDirectoryItem || selectedDirectoryItem->parent())
+    {
+        return {};
+    }
+
+    return selectedDirectoryItem->data(0, directoryPathDataRole_).toString();
+}
+
+void MainWindow::setScanDirectoryPaths(const QStringList& directoryPaths)
+{
+    ui->directories_TreeWidget->clear();
+
+    for (const QString& directoryPath: directoryPaths)
+    {
+        const QString normalizedDirectoryPath = QDir(directoryPath).absolutePath();
+        ui->directories_TreeWidget->addTopLevelItem(createDirectoryTreeItem(normalizedDirectoryPath, QDir::toNativeSeparators(normalizedDirectoryPath)));
+    }
+
+    if (ui->directories_TreeWidget->topLevelItemCount() > 0)
+    {
+        ui->directories_TreeWidget->setCurrentItem(ui->directories_TreeWidget->topLevelItem(ui->directories_TreeWidget->topLevelItemCount() - 1));
+    }
+
+    updateDirectoryActionStates();
+}
+
 void MainWindow::addScanDirectory(const QString& directoryPath)
 {
     const QString normalizedDirectoryPath = QDir(directoryPath).absolutePath();
-    QTreeWidgetItem* directoryItem = createDirectoryTreeItem(normalizedDirectoryPath,
-                                                             QDir::toNativeSeparators(normalizedDirectoryPath));
+    QTreeWidgetItem* directoryItem = createDirectoryTreeItem(normalizedDirectoryPath, QDir::toNativeSeparators(normalizedDirectoryPath));
 
     ui->directories_TreeWidget->addTopLevelItem(directoryItem);
     ui->directories_TreeWidget->setCurrentItem(directoryItem);
@@ -220,7 +257,7 @@ const QList<DuplicateGroup>& MainWindow::getDisplayedDuplicateGroups() const
     return ui->resultsTab->getDisplayedDuplicateGroups();
 }
 
-ScanType MainWindow::getScanType() const
+ScanType MainWindow::getScanTypeFromComboBox() const
 {
     const QVariant data = ui->scanType_ComboBox->currentData();
 
@@ -230,6 +267,18 @@ ScanType MainWindow::getScanType() const
     }
 
     return data.value<ScanType>();
+}
+
+void MainWindow::setScanTypeInComboBox(const ScanType scanType)
+{
+    const int scanTypeIndex = ui->scanType_ComboBox->findData(QVariant::fromValue(scanType));
+
+    if (scanTypeIndex < 0)
+    {
+        qFatal("Cannot display an unknown ScanType value: %d", static_cast<int>(scanType));
+    }
+
+    ui->scanType_ComboBox->setCurrentIndex(scanTypeIndex);
 }
 
 QTreeWidgetItem* MainWindow::createDirectoryTreeItem(const QString& directoryPath, const QString& displayedPath) const
@@ -345,5 +394,5 @@ void MainWindow::initializeResultsTabCloseButton()
     const int resultsTabIndex = ui->main_TabWidget->indexOf(ui->resultsTab);
     ui->main_TabWidget->tabBar()->setTabButton(resultsTabIndex, QTabBar::RightSide, closeButton);
 
-    connect(closeButton, &QToolButton::clicked, this, &MainWindow::clearScanResult);
+    connect(closeButton, &QToolButton::clicked, this, &MainWindow::scanResultCloseRequested);
 }

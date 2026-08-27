@@ -15,7 +15,7 @@ private:
     void printAppInfo();
     void applyLightTheme();
 
-    std::unique_ptr<Controller> controller_;
     std::unique_ptr<Model> model_;
     std::unique_ptr<MainWindow> view_;
+    std::unique_ptr<Controller> controller_;
 };

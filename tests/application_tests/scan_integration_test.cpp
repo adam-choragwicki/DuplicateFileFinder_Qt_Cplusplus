@@ -1,5 +1,6 @@
 #include "controller.h"
 #include "model.h"
+#include "test_helpers/scan_result_test_helpers.h"
 #include "temporary_scan_directory_test_fixture.h"
 
 #include <QAction>
@@ -15,6 +16,7 @@
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTimer>
+#include <QToolButton>
 
 #include <gtest/gtest.h>
 
@@ -155,11 +157,11 @@ namespace
     }
 }
 
-/// @brief Verifies that the controller rejects a scan request when the view contains no scan directories.
+/// @brief Verifies that the controller rejects a scan request when the model contains no scan directories.
 ///
 /// @par Test setup
 /// Construct `Model`, `MainWindow`, and `Controller` without adding a scan directory. Locate the Start scan
-/// button and confirm that the window reports an empty root list.
+/// button and confirm that both authoritative model state and its rendered view contain no roots.
 ///
 /// @par Procedure
 /// Click Start scan, capture and close the modal message box opened by the controller, and inspect whether a
@@ -178,6 +180,7 @@ TEST(ControllerIntegrationTest, RejectScanAndExplainReason_WhenNoDirectoriesAreS
     auto* startScanButton = mainWindow.findChild<QPushButton*>(QStringLiteral("startScan_PushButton"));
 
     ASSERT_NE(startScanButton, nullptr);
+    ASSERT_TRUE(model.getScanDirectoryPaths().isEmpty());
     ASSERT_TRUE(mainWindow.getScanDirectoryPaths().isEmpty());
 
     const ObservedMessageBox messageBox = activateAndObserveMessageBox(
@@ -198,7 +201,7 @@ TEST(ControllerIntegrationTest, RejectScanAndExplainReason_WhenNoDirectoriesAreS
 ///
 /// @par Test setup
 /// Create two differently named files with identical contents below a temporary root. Construct `Model`,
-/// `MainWindow`, and `Controller`, add the root directly to the window, select content scanning, and locate
+/// `MainWindow`, and `Controller`, add the root to the model, select content scanning in the window, and locate
 /// the Start control and result-related widgets.
 ///
 /// @par Procedure
@@ -220,7 +223,7 @@ TEST_F(ApplicationScanIntegrationTest, DisplayDuplicateResults_WhenContentScanIs
     MainWindow mainWindow;
     Controller controller(model, mainWindow);
 
-    mainWindow.addScanDirectory(scanRootPath());
+    ASSERT_EQ(model.addScanDirectory(scanRootPath()).outcome, Model::AddScanDirectoryOutcome::Added);
 
     auto* scanTypeComboBox = mainWindow.findChild<QComboBox*>(QStringLiteral("scanType_ComboBox"));
     auto* startScanButton = mainWindow.findChild<QPushButton*>(QStringLiteral("startScan_PushButton"));
@@ -239,6 +242,7 @@ TEST_F(ApplicationScanIntegrationTest, DisplayDuplicateResults_WhenContentScanIs
     const int contentScanIndex = scanTypeComboBox->findData(QVariant::fromValue(ScanType::ByFileContent));
     ASSERT_GE(contentScanIndex, 0);
     scanTypeComboBox->setCurrentIndex(contentScanIndex);
+    ASSERT_EQ(model.getScanType(), ScanType::ByFileContent);
 
     mainWindow.show();
     QApplication::processEvents();
@@ -268,8 +272,8 @@ TEST_F(ApplicationScanIntegrationTest, DisplayDuplicateResults_WhenContentScanIs
 /// @brief Verifies the complete UI-to-scanner failure path when a selected scan root does not exist.
 ///
 /// @par Test setup
-/// Construct `Model`, `MainWindow`, and `Controller`, add a path below the temporary root that has not been
-/// created, and locate the Start scan control and export action.
+/// Construct `Model`, `MainWindow`, and `Controller`, add a nonexistent path below the temporary root to the
+/// model, and locate the Start scan control and export action.
 ///
 /// @par Procedure
 /// Click Start scan and process Qt events while the real asynchronous scanner rejects the missing root. Capture
@@ -288,7 +292,7 @@ TEST_F(ApplicationScanIntegrationTest, ReportFailure_WhenScanRootDoesNotExist)
     MainWindow mainWindow;
     Controller controller(model, mainWindow);
 
-    mainWindow.addScanDirectory(missingScanRootPath);
+    ASSERT_EQ(model.addScanDirectory(missingScanRootPath).outcome, Model::AddScanDirectoryOutcome::Added);
 
     auto* startScanButton = mainWindow.findChild<QPushButton*>(QStringLiteral("startScan_PushButton"));
     auto* exportAction = mainWindow.findChild<QAction*>(QStringLiteral("exportToHtml_Action"));
@@ -318,4 +322,52 @@ TEST_F(ApplicationScanIntegrationTest, ReportFailure_WhenScanRootDoesNotExist)
     EXPECT_TRUE(mainWindow.getDisplayedDuplicateGroups().isEmpty());
     EXPECT_FALSE(exportAction->isEnabled());
     EXPECT_EQ(QApplication::activeModalWidget(), nullptr);
+}
+
+/// @brief Verifies that closing the Results tab clears both authoritative result state and its presentation.
+///
+/// @par Test setup
+/// Construct and connect `Model`, `MainWindow`, and `Controller`. Put the model through a scan-state transition
+/// ending with a duplicate result, then locate the result-related widgets and custom close button.
+///
+/// @par Procedure
+/// Confirm that the completed result is stored and displayed, click the Results-tab close button, and inspect
+/// the model and window after the close request has passed through the controller wiring.
+///
+/// @par Expected results
+/// - Before the click, the model contains duplicate results and the Results tab is visible and active.
+/// - Clicking the close button removes the latest result from the model.
+/// - The Results tab is hidden, Directories becomes active, export is disabled, and no duplicate groups remain displayed.
+TEST_F(ApplicationScanIntegrationTest, ClearModelAndViewResult_WhenResultsTabCloseButtonIsClicked)
+{
+    Model model;
+    MainWindow mainWindow;
+    Controller controller(model, mainWindow);
+
+    ASSERT_EQ(model.addScanDirectory(scanRootPath()).outcome, Model::AddScanDirectoryOutcome::Added);
+    ASSERT_EQ(model.beginScan(), Model::ScanStartOutcome::Started);
+    model.completeScan(test_helpers::createScanResultWithDuplicates());
+
+    auto* tabWidget = mainWindow.findChild<QTabWidget*>(QStringLiteral("main_TabWidget"));
+    auto* resultsTab = mainWindow.findChild<QWidget*>(QStringLiteral("resultsTab"));
+    auto* directoriesTab = mainWindow.findChild<QWidget*>(QStringLiteral("directoriesTab"));
+    auto* closeButton = mainWindow.findChild<QToolButton*>(QStringLiteral("closeResultsTab_ToolButton"));
+    auto* exportAction = mainWindow.findChild<QAction*>(QStringLiteral("exportToHtml_Action"));
+
+    ASSERT_NE(tabWidget, nullptr);
+    ASSERT_NE(resultsTab, nullptr);
+    ASSERT_NE(directoriesTab, nullptr);
+    ASSERT_NE(closeButton, nullptr);
+    ASSERT_NE(exportAction, nullptr);
+    ASSERT_TRUE(model.hasDuplicateResults());
+    ASSERT_TRUE(tabWidget->isTabVisible(tabWidget->indexOf(resultsTab)));
+    ASSERT_EQ(tabWidget->currentWidget(), resultsTab);
+
+    closeButton->click();
+
+    EXPECT_FALSE(model.getLatestScanResult().has_value());
+    EXPECT_FALSE(tabWidget->isTabVisible(tabWidget->indexOf(resultsTab)));
+    EXPECT_EQ(tabWidget->currentWidget(), directoriesTab);
+    EXPECT_FALSE(exportAction->isEnabled());
+    EXPECT_TRUE(mainWindow.getDisplayedDuplicateGroups().isEmpty());
 }

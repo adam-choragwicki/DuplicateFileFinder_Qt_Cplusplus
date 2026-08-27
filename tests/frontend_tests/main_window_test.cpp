@@ -1,4 +1,5 @@
 #include "frontend/main_window.h"
+#include "test_helpers/scan_result_test_helpers.h"
 
 #include <QAction>
 #include <QPushButton>
@@ -8,25 +9,6 @@
 #include <QToolButton>
 
 #include <gtest/gtest.h>
-
-namespace
-{
-    /// @brief Creates a scan result suitable for testing result-dependent `MainWindow` behavior.
-    ///
-    /// @return A completed file-name scan result containing one duplicate group whose two files have
-    /// the same name and reside in different directories.
-    ScanResult createScanResultWithDuplicates()
-    {
-        DuplicateGroup duplicateGroup;
-        duplicateGroup.addFile(FileRecord{QStringLiteral("duplicate.txt"), QStringLiteral("C:/first"), 8});
-        duplicateGroup.addFile(FileRecord{QStringLiteral("duplicate.txt"), QStringLiteral("C:/second"), 8});
-
-        return ScanResult{QList<DuplicateGroup>{duplicateGroup},
-                          ScanOutcome::CompletedWithDuplicates,
-                          FileNameScanSummary{}
-        };
-    }
-}
 
 /// @brief Verifies the result-related state of a newly constructed main window.
 ///
@@ -76,7 +58,7 @@ TEST(MainWindowTest, CheckResultsUnavailable_WhenApplicationStarts)
 TEST(MainWindowTest, CheckResultsUnavailable_AfterDisplayedResultIsCleared)
 {
     MainWindow mainWindow;
-    const ScanResult scanResult = createScanResultWithDuplicates();
+    const ScanResult scanResult = test_helpers::createScanResultWithDuplicates();
 
     auto* tabWidget = mainWindow.findChild<QTabWidget*>(QStringLiteral("main_TabWidget"));
     auto* resultsTab = mainWindow.findChild<QWidget*>(QStringLiteral("resultsTab"));
@@ -103,23 +85,24 @@ TEST(MainWindowTest, CheckResultsUnavailable_AfterDisplayedResultIsCleared)
     EXPECT_TRUE(mainWindow.getDisplayedDuplicateGroups().isEmpty()); // no duplicates group available
 }
 
-/// @brief Verifies the placement and behavior of the custom Results-tab close button.
+/// @brief Verifies the placement of the custom Results-tab close button and forwarding of its user intent.
 ///
 /// @par Test setup
 /// Construct `MainWindow`, prepare a scan result containing duplicates, and locate both tab pages, the custom
-/// close button, and the export action.
+/// close button, and the export action. Observe `MainWindow::scanResultCloseRequested`.
 ///
 /// @par Procedure
-/// Inspect the close button's icon and tab-bar placement, display the result, and click the close button.
+/// Inspect the close button's icon and tab-bar placement, display the result, and click the close button while
+/// recording the requests emitted by the window.
 ///
 /// @par Expected results
 /// - The close button has an icon and belongs only to the Results tab.
-/// - Clicking it clears the result, hides Results, activates Directories, and disables export.
-/// - No duplicate groups remain available after the click.
-TEST(MainWindowTest, ClearDisplayedResult_WhenResultsTabCloseButtonIsClicked)
+/// - The prepared result is visible and export is enabled before the interaction.
+/// - Clicking the button emits exactly one request to clear the application result.
+TEST(MainWindowTest, RequestResultClearing_WhenResultsTabCloseButtonIsClicked)
 {
     MainWindow mainWindow;
-    const ScanResult scanResult = createScanResultWithDuplicates();
+    const ScanResult scanResult = test_helpers::createScanResultWithDuplicates();
 
     auto* tabWidget = mainWindow.findChild<QTabWidget*>(QStringLiteral("main_TabWidget"));
     auto* resultsTab = mainWindow.findChild<QWidget*>(QStringLiteral("resultsTab"));
@@ -132,6 +115,9 @@ TEST(MainWindowTest, ClearDisplayedResult_WhenResultsTabCloseButtonIsClicked)
     ASSERT_NE(directoriesTab, nullptr);
     ASSERT_NE(closeButton, nullptr);
     ASSERT_NE(exportAction, nullptr);
+    int closeRequestCount = 0;
+    QObject::connect(&mainWindow, &MainWindow::scanResultCloseRequested, &mainWindow,
+                     [&closeRequestCount] { ++closeRequestCount; });
     EXPECT_FALSE(closeButton->icon().isNull()); // close button has an icon
 
     const int directoriesTabIndex = tabWidget->indexOf(directoriesTab);
@@ -140,12 +126,13 @@ TEST(MainWindowTest, ClearDisplayedResult_WhenResultsTabCloseButtonIsClicked)
     EXPECT_EQ(tabWidget->tabBar()->tabButton(resultsTabIndex, QTabBar::RightSide), closeButton); // results tab owns the close button
 
     mainWindow.showScanResult(scanResult);
+    ASSERT_TRUE(tabWidget->isTabVisible(resultsTabIndex)); // results tab is visible before requesting its closure
+    ASSERT_EQ(tabWidget->currentWidget(), resultsTab); // results tab is active before requesting its closure
+    ASSERT_TRUE(exportAction->isEnabled()); // export is enabled while a result is displayed
+
     closeButton->click();
 
-    EXPECT_FALSE(tabWidget->isTabVisible(resultsTabIndex)); // results tab is not visible
-    EXPECT_EQ(tabWidget->currentWidget(), directoriesTab); // directories tab is the active tab
-    EXPECT_FALSE(exportAction->isEnabled()); // export action is disabled
-    EXPECT_TRUE(mainWindow.getDisplayedDuplicateGroups().isEmpty()); // no duplicates group available
+    EXPECT_EQ(closeRequestCount, 1); // one close request is forwarded for one button activation
 }
 
 /// @brief Verifies that an empty scan result invalidates a previously displayed non-empty result.
@@ -165,7 +152,7 @@ TEST(MainWindowTest, ClearDisplayedResult_WhenResultsTabCloseButtonIsClicked)
 TEST(MainWindowTest, ClearExistingResult_WhenEmptyScanResultIsShown)
 {
     MainWindow mainWindow;
-    const ScanResult scanResultWithDuplicates = createScanResultWithDuplicates();
+    const ScanResult scanResultWithDuplicates = test_helpers::createScanResultWithDuplicates();
     const ScanResult scanResultWithoutDuplicates{QList<DuplicateGroup>{},
                                                  ScanOutcome::CompletedWithoutDuplicates,
                                                  FileNameScanSummary{}
@@ -211,7 +198,7 @@ TEST(MainWindowTest, ClearExistingResult_WhenEmptyScanResultIsShown)
 TEST(MainWindowTest, RequestFileReveal_WhenResultRowIsDoubleClicked)
 {
     MainWindow mainWindow;
-    const ScanResult scanResult = createScanResultWithDuplicates();
+    const ScanResult scanResult = test_helpers::createScanResultWithDuplicates();
     auto* resultsTable = mainWindow.findChild<QTableWidget*>(QStringLiteral("results_TableWidget"));
 
     ASSERT_NE(resultsTable, nullptr);
@@ -300,7 +287,7 @@ TEST(MainWindowTest, EmitExpectedRequestSignals_WhenControlsAreActivated)
     EXPECT_EQ(startScanRequestCount, 1);
     EXPECT_EQ(exportRequestCount, 0);
 
-    mainWindow.showScanResult(createScanResultWithDuplicates());
+    mainWindow.showScanResult(test_helpers::createScanResultWithDuplicates());
     ASSERT_TRUE(exportAction->isEnabled());
     exportAction->trigger();
 
