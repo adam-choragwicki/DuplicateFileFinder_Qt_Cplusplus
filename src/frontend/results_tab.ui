@@ -15,23 +15,7 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="QTableWidget" name="results_TableWidget">
-     <column>
-      <property name="text">
-       <string>File name</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Directories</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Size</string>
-      </property>
-     </column>
-    </widget>
+    <widget class="QTableView" name="results_TableView"/>
    </item>
   </layout>
  </widget>

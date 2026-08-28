@@ -4,6 +4,8 @@
 
 #include <QWidget>
 
+class DuplicateResultsTableModel;
+
 namespace Ui
 {
     class ResultsTab;
@@ -30,12 +32,8 @@ private:
     [[nodiscard]] QString getAbsoluteFilePathForRow(int row) const;
     void revealFileInSystemFileManager(int row);
     void showResultContextMenu(const QPoint& position);
-    void sortResultGroups(int column, Qt::SortOrder sortOrder);
-    void rebuildResultsTable();
 
     Ui::ResultsTab* ui;
-    QList<DuplicateGroup> duplicateGroups_;
-    int sortColumn_{};
-    Qt::SortOrder sortOrder_{Qt::AscendingOrder};
+    DuplicateResultsTableModel* resultsTableModel_{};
     bool columnWidthsInitialized_{};
 };

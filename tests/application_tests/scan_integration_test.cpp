@@ -14,7 +14,7 @@
 #include <QPushButton>
 #include <QSet>
 #include <QTabWidget>
-#include <QTableWidget>
+#include <QTableView>
 #include <QTimer>
 #include <QToolButton>
 
@@ -230,7 +230,7 @@ TEST_F(ApplicationScanIntegrationTest, DisplayDuplicateResults_WhenContentScanIs
     auto* tabWidget = mainWindow.findChild<QTabWidget*>(QStringLiteral("main_TabWidget"));
     auto* resultsTab = mainWindow.findChild<QWidget*>(QStringLiteral("resultsTab"));
     auto* exportAction = mainWindow.findChild<QAction*>(QStringLiteral("exportToHtml_Action"));
-    auto* resultsTable = mainWindow.findChild<QTableWidget*>(QStringLiteral("results_TableWidget"));
+    auto* resultsTable = mainWindow.findChild<QTableView*>(QStringLiteral("results_TableView"));
 
     ASSERT_NE(scanTypeComboBox, nullptr);
     ASSERT_NE(startScanButton, nullptr);
@@ -238,6 +238,7 @@ TEST_F(ApplicationScanIntegrationTest, DisplayDuplicateResults_WhenContentScanIs
     ASSERT_NE(resultsTab, nullptr);
     ASSERT_NE(exportAction, nullptr);
     ASSERT_NE(resultsTable, nullptr);
+    ASSERT_NE(resultsTable->model(), nullptr);
 
     const int contentScanIndex = scanTypeComboBox->findData(QVariant::fromValue(ScanType::ByFileContent));
     ASSERT_GE(contentScanIndex, 0);
@@ -253,7 +254,7 @@ TEST_F(ApplicationScanIntegrationTest, DisplayDuplicateResults_WhenContentScanIs
     const QList<DuplicateGroup>& displayedGroups = mainWindow.getDisplayedDuplicateGroups();
     ASSERT_EQ(displayedGroups.size(), 1);
     ASSERT_EQ(displayedGroups.constFirst().getFiles().size(), 2);
-    EXPECT_EQ(resultsTable->rowCount(), 2);
+    EXPECT_EQ(resultsTable->model()->rowCount(), 2);
 
     QSet<QString> displayedFilePaths;
     for (const FileRecord& file: displayedGroups.constFirst().getFiles())

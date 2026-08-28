@@ -6,7 +6,7 @@
 #include <QKeyEvent>
 #include <QLocale>
 #include <QMenu>
-#include <QTableWidget>
+#include <QTableView>
 #include <QTimer>
 
 #include <gtest/gtest.h>
@@ -71,17 +71,19 @@ namespace
     ///
     /// @param resultsTable Results table containing the filename column to inspect.
     /// @param expectedFileNames Expected filename for every row, in display order.
-    void verifyExpectedFileNameOrder(const QTableWidget& resultsTable, const QStringList& expectedFileNames)
+    void verifyExpectedFileNameOrder(const QTableView& resultsTable, const QStringList& expectedFileNames)
     {
-        ASSERT_EQ(resultsTable.rowCount(), expectedFileNames.size());
+        const QAbstractItemModel* resultsModel = resultsTable.model();
+        ASSERT_NE(resultsModel, nullptr);
+        ASSERT_EQ(resultsModel->rowCount(), expectedFileNames.size());
 
-        for (int row = 0; row < resultsTable.rowCount(); ++row)
+        for (int row = 0; row < resultsModel->rowCount(); ++row)
         {
             // On failure, GoogleTest adds "Result row <index>" to identify which row has an unexpected filename.
             SCOPED_TRACE(testing::Message() << "Result row " << row);
-            const QTableWidgetItem* fileNameItem = resultsTable.item(row, fileNameColumn);
-            ASSERT_NE(fileNameItem, nullptr);
-            EXPECT_EQ(fileNameItem->text().toStdString(), expectedFileNames.at(row).toStdString());
+            const QModelIndex fileNameIndex = resultsModel->index(row, fileNameColumn);
+            ASSERT_TRUE(fileNameIndex.isValid());
+            EXPECT_EQ(fileNameIndex.data(Qt::DisplayRole).toString().toStdString(), expectedFileNames.at(row).toStdString());
         }
     }
 
@@ -94,7 +96,7 @@ namespace
     /// @param position Position within the table viewport at which the menu is requested.
     /// @param actionText Text of the context-menu action to activate.
     /// @return `true` if the popup menu and requested action were found and the action was activated.
-    bool activateContextMenuAction(QTableWidget& resultsTable, const QPoint& position, const QString& actionText)
+    bool activateContextMenuAction(QTableView& resultsTable, const QPoint& position, const QString& actionText)
     {
         // The zero-delay callback updates this flag while the function is blocked inside the menu's nested
         // event loop. The value lets the caller distinguish successful automation from fail-safe dismissal.
@@ -214,8 +216,10 @@ TEST(ResultsTabTest, PopulateTable_WhenDuplicateGroupsAreShown)
     const DuplicateGroup threeFileGroup = createDuplicateGroup({threeFileGroupReference, threeFileGroupDuplicateOne, threeFileGroupDuplicateTwo});
     resultsTab.showDuplicateGroups(QList<DuplicateGroup>{threeFileGroup, twoFileGroup});
 
-    const auto* resultsTable = resultsTab.findChild<QTableWidget*>(QStringLiteral("results_TableWidget"));
+    const auto* resultsTable = resultsTab.findChild<QTableView*>(QStringLiteral("results_TableView"));
     ASSERT_NE(resultsTable, nullptr);
+    const QAbstractItemModel* resultsModel = resultsTable->model();
+    ASSERT_NE(resultsModel, nullptr);
 
     const QList<FileRecord> expectedFiles{twoFileGroupReference,
                                           twoFileGroupDuplicate,
@@ -235,31 +239,28 @@ TEST(ResultsTabTest, PopulateTable_WhenDuplicateGroupsAreShown)
                                            QStringLiteral("512 B"),
                                            QStringLiteral("1.00 kB")};
 
-    ASSERT_EQ(resultsTable->rowCount(), expectedFiles.size());
-    ASSERT_EQ(resultsTable->columnCount(), 3);
-    ASSERT_NE(resultsTable->horizontalHeaderItem(sizesColumn), nullptr);
-    EXPECT_EQ(resultsTable->horizontalHeaderItem(sizesColumn)->text().toStdString(), std::string("Size"));
+    ASSERT_EQ(resultsModel->rowCount(), expectedFiles.size());
+    ASSERT_EQ(resultsModel->columnCount(), 3);
+    EXPECT_EQ(resultsModel->headerData(sizesColumn, Qt::Horizontal, Qt::DisplayRole).toString().toStdString(), std::string("Size"));
 
-    for (int row = 0; row < resultsTable->rowCount(); ++row)
+    for (int row = 0; row < resultsModel->rowCount(); ++row)
     {
         // On failure, GoogleTest adds "Result row <index>" to identify which row contains incorrect file data.
         SCOPED_TRACE(testing::Message() << "Result row " << row);
         const FileRecord& expectedFile = expectedFiles.at(row);
-        const QTableWidgetItem* fileNameItem = resultsTable->item(row, fileNameColumn);
-        const QTableWidgetItem* directoryItem = resultsTable->item(row, directoriesColumn);
-        const QTableWidgetItem* sizeItem = resultsTable->item(row, sizesColumn);
-        const QTableWidgetItem* groupNumberItem = resultsTable->verticalHeaderItem(row);
+        const QModelIndex fileNameIndex = resultsModel->index(row, fileNameColumn);
+        const QModelIndex directoryIndex = resultsModel->index(row, directoriesColumn);
+        const QModelIndex sizeIndex = resultsModel->index(row, sizesColumn);
 
-        ASSERT_NE(fileNameItem, nullptr);
-        ASSERT_NE(directoryItem, nullptr);
-        ASSERT_NE(sizeItem, nullptr);
-        ASSERT_NE(groupNumberItem, nullptr);
+        ASSERT_TRUE(fileNameIndex.isValid());
+        ASSERT_TRUE(directoryIndex.isValid());
+        ASSERT_TRUE(sizeIndex.isValid());
 
-        EXPECT_EQ(fileNameItem->text().toStdString(), expectedFile.getFileName().toStdString());
-        EXPECT_EQ(directoryItem->text().toStdString(), expectedFile.getDirectoryPath().toStdString());
-        EXPECT_EQ(sizeItem->text().toStdString(), expectedDisplaySizes.at(row).toStdString());
-        EXPECT_EQ(fileNameItem->data(Qt::UserRole).toString().toStdString(), expectedFile.getAbsoluteFilePath().toStdString());
-        EXPECT_EQ(groupNumberItem->text().toStdString(), expectedGroupNumbers.at(row).toStdString());
+        EXPECT_EQ(fileNameIndex.data(Qt::DisplayRole).toString().toStdString(), expectedFile.getFileName().toStdString());
+        EXPECT_EQ(directoryIndex.data(Qt::DisplayRole).toString().toStdString(), expectedFile.getDirectoryPath().toStdString());
+        EXPECT_EQ(sizeIndex.data(Qt::DisplayRole).toString().toStdString(), expectedDisplaySizes.at(row).toStdString());
+        EXPECT_EQ(fileNameIndex.data(Qt::UserRole).toString().toStdString(), expectedFile.getAbsoluteFilePath().toStdString());
+        EXPECT_EQ(resultsModel->headerData(row, Qt::Vertical, Qt::DisplayRole).toString().toStdString(), expectedGroupNumbers.at(row).toStdString());
     }
 }
 
@@ -295,24 +296,26 @@ TEST(ResultsTabTest, DisplayAdaptiveFileSizeUnits_WhenFileSizesSpanMultipleUnits
 
     resultsTab.showDuplicateGroups({duplicateGroup});
 
-    const auto* resultsTable = resultsTab.findChild<QTableWidget*>(QStringLiteral("results_TableWidget"));
+    const auto* resultsTable = resultsTab.findChild<QTableView*>(QStringLiteral("results_TableView"));
     ASSERT_NE(resultsTable, nullptr);
+    const QAbstractItemModel* resultsModel = resultsTable->model();
+    ASSERT_NE(resultsModel, nullptr);
 
     const QStringList expectedDisplaySizes{QStringLiteral("512 B"),
                                            QStringLiteral("1.50 kB"),
                                            QStringLiteral("2.00 MB"),
                                            QStringLiteral("3.00 GB"),
                                            QStringLiteral("4.00 TB")};
-    ASSERT_EQ(resultsTable->rowCount(), expectedDisplaySizes.size());
+    ASSERT_EQ(resultsModel->rowCount(), expectedDisplaySizes.size());
 
-    for (int row = 0; row < resultsTable->rowCount(); ++row)
+    for (int row = 0; row < resultsModel->rowCount(); ++row)
     {
         // On failure, GoogleTest adds "Result row <index>" to identify the incorrectly formatted size.
         SCOPED_TRACE(testing::Message() << "Result row " << row);
-        const QTableWidgetItem* sizeItem = resultsTable->item(row, sizesColumn);
+        const QModelIndex sizeIndex = resultsModel->index(row, sizesColumn);
 
-        ASSERT_NE(sizeItem, nullptr);
-        EXPECT_EQ(sizeItem->text().toStdString(), expectedDisplaySizes.at(row).toStdString());
+        ASSERT_TRUE(sizeIndex.isValid());
+        EXPECT_EQ(sizeIndex.data(Qt::DisplayRole).toString().toStdString(), expectedDisplaySizes.at(row).toStdString());
     }
 }
 
@@ -345,7 +348,7 @@ TEST(ResultsTabTest, KeepDuplicateGroupsTogether_WhenResultsAreSorted)
                                                             FileRecord{QStringLiteral("other-copy-b.txt"), QStringLiteral("C:/third/b"), 1024}});
     const QList<DuplicateGroup> duplicateGroups{fileTenGroup, thirdGroup, fileTwoGroup};
 
-    auto* resultsTable = resultsTab.findChild<QTableWidget*>(QStringLiteral("results_TableWidget"));
+    auto* resultsTable = resultsTab.findChild<QTableView*>(QStringLiteral("results_TableView"));
     ASSERT_NE(resultsTable, nullptr);
     QHeaderView* horizontalHeader = resultsTable->horizontalHeader();
     ASSERT_NE(horizontalHeader, nullptr);
@@ -393,7 +396,7 @@ TEST(ResultsTabTest, ToggleSortOrder_WhenSameHeaderIsClicked)
 
     resultsTab.showDuplicateGroups(QList<DuplicateGroup>{fileTenGroup, fileTwoGroup});
 
-    auto* resultsTable = resultsTab.findChild<QTableWidget*>(QStringLiteral("results_TableWidget"));
+    auto* resultsTable = resultsTab.findChild<QTableView*>(QStringLiteral("results_TableView"));
     ASSERT_NE(resultsTable, nullptr);
     QHeaderView* horizontalHeader = resultsTable->horizontalHeader();
     ASSERT_NE(horizontalHeader, nullptr);
@@ -436,7 +439,7 @@ TEST(ResultsTabTest, ResetSorting_WhenNewResultsAreShown)
                                                                 FileRecord{QStringLiteral("first-copy.txt"), QStringLiteral("C:/large/copy"), 4096}});
     resultsTab.showDuplicateGroups(QList<DuplicateGroup>{smallFileGroup, largeFileGroup});
 
-    auto* resultsTable = resultsTab.findChild<QTableWidget*>(QStringLiteral("results_TableWidget"));
+    auto* resultsTable = resultsTab.findChild<QTableView*>(QStringLiteral("results_TableView"));
     ASSERT_NE(resultsTable, nullptr);
 
     QHeaderView* horizontalHeader = resultsTable->horizontalHeader();
@@ -484,9 +487,10 @@ TEST(ResultsTabTest, ReplacePreviousRows_WhenNewResultsAreShown)
 
     resultsTab.showDuplicateGroups(QList<DuplicateGroup>{oldGroup});
 
-    auto* resultsTable = resultsTab.findChild<QTableWidget*>(QStringLiteral("results_TableWidget"));
+    auto* resultsTable = resultsTab.findChild<QTableView*>(QStringLiteral("results_TableView"));
     ASSERT_NE(resultsTable, nullptr);
-    ASSERT_EQ(resultsTable->rowCount(), 3);
+    ASSERT_NE(resultsTable->model(), nullptr);
+    ASSERT_EQ(resultsTable->model()->rowCount(), 3);
 
     resultsTab.showDuplicateGroups(QList<DuplicateGroup>{newGroup});
 
@@ -518,12 +522,13 @@ TEST(ResultsTabContextMenuTest, CopyNativePath_WhenCopyContextActionIsSelected)
 
     QApplication::processEvents();
 
-    auto* resultsTable = resultsTab.findChild<QTableWidget*>(QStringLiteral("results_TableWidget"));
+    auto* resultsTable = resultsTab.findChild<QTableView*>(QStringLiteral("results_TableView"));
     ASSERT_NE(resultsTable, nullptr);
-    const QTableWidgetItem* duplicateFileNameItem = resultsTable->item(1, fileNameColumn);
-    ASSERT_NE(duplicateFileNameItem, nullptr);
+    ASSERT_NE(resultsTable->model(), nullptr);
+    const QModelIndex duplicateFileNameIndex = resultsTable->model()->index(1, fileNameColumn);
+    ASSERT_TRUE(duplicateFileNameIndex.isValid());
 
-    const QPoint duplicateRowPosition = resultsTable->visualItemRect(duplicateFileNameItem).center();
+    const QPoint duplicateRowPosition = resultsTable->visualRect(duplicateFileNameIndex).center();
     ASSERT_TRUE(resultsTable->indexAt(duplicateRowPosition).isValid());
 
     QClipboard* clipboard = QApplication::clipboard();
@@ -562,12 +567,13 @@ TEST(ResultsTabContextMenuTest, RequestFileReveal_WhenRevealContextActionIsSelec
 
     QApplication::processEvents();
 
-    auto* resultsTable = resultsTab.findChild<QTableWidget*>(QStringLiteral("results_TableWidget"));
+    auto* resultsTable = resultsTab.findChild<QTableView*>(QStringLiteral("results_TableView"));
     ASSERT_NE(resultsTable, nullptr);
-    const QTableWidgetItem* referenceFileNameItem = resultsTable->item(0, fileNameColumn);
-    ASSERT_NE(referenceFileNameItem, nullptr);
+    ASSERT_NE(resultsTable->model(), nullptr);
+    const QModelIndex referenceFileNameIndex = resultsTable->model()->index(0, fileNameColumn);
+    ASSERT_TRUE(referenceFileNameIndex.isValid());
 
-    const QPoint referenceRowPosition = resultsTable->visualItemRect(referenceFileNameItem).center();
+    const QPoint referenceRowPosition = resultsTable->visualRect(referenceFileNameIndex).center();
     ASSERT_TRUE(resultsTable->indexAt(referenceRowPosition).isValid());
 
     int revealRequestCount = 0;
@@ -611,9 +617,10 @@ TEST(ResultsTabContextMenuTest, DoNothing_WhenContextMenuIsRequestedOutsideAResu
 
     QApplication::processEvents();
 
-    auto* resultsTable = resultsTab.findChild<QTableWidget*>(QStringLiteral("results_TableWidget"));
+    auto* resultsTable = resultsTab.findChild<QTableView*>(QStringLiteral("results_TableView"));
     ASSERT_NE(resultsTable, nullptr);
-    resultsTable->setCurrentCell(0, fileNameColumn);
+    ASSERT_NE(resultsTable->model(), nullptr);
+    resultsTable->setCurrentIndex(resultsTable->model()->index(0, fileNameColumn));
     const QModelIndex originalCurrentIndex = resultsTable->currentIndex();
     ASSERT_TRUE(originalCurrentIndex.isValid());
 

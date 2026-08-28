@@ -4,7 +4,7 @@
 #include <QAction>
 #include <QPushButton>
 #include <QTabWidget>
-#include <QTableWidget>
+#include <QTableView>
 #include <QTemporaryDir>
 #include <QToolButton>
 
@@ -161,7 +161,7 @@ TEST(MainWindowTest, ClearExistingResult_WhenEmptyScanResultIsShown)
     auto* tabWidget = mainWindow.findChild<QTabWidget*>(QStringLiteral("main_TabWidget"));
     auto* resultsTab = mainWindow.findChild<QWidget*>(QStringLiteral("resultsTab"));
     auto* directoriesTab = mainWindow.findChild<QWidget*>(QStringLiteral("directoriesTab"));
-    auto* resultsTable = mainWindow.findChild<QTableWidget*>(QStringLiteral("results_TableWidget"));
+    auto* resultsTable = mainWindow.findChild<QTableView*>(QStringLiteral("results_TableView"));
     auto* exportAction = mainWindow.findChild<QAction*>(QStringLiteral("exportToHtml_Action"));
 
     ASSERT_NE(tabWidget, nullptr);
@@ -172,7 +172,8 @@ TEST(MainWindowTest, ClearExistingResult_WhenEmptyScanResultIsShown)
 
     mainWindow.showScanResult(scanResultWithDuplicates);
     ASSERT_FALSE(mainWindow.getDisplayedDuplicateGroups().isEmpty());
-    ASSERT_GT(resultsTable->rowCount(), 0);
+    ASSERT_NE(resultsTable->model(), nullptr);
+    ASSERT_GT(resultsTable->model()->rowCount(), 0);
 
     mainWindow.showScanResult(scanResultWithoutDuplicates);
 
@@ -180,7 +181,7 @@ TEST(MainWindowTest, ClearExistingResult_WhenEmptyScanResultIsShown)
     EXPECT_EQ(tabWidget->currentWidget(), directoriesTab); // directories tab is the active tab
     EXPECT_FALSE(exportAction->isEnabled()); // export action is disabled
     EXPECT_TRUE(mainWindow.getDisplayedDuplicateGroups().isEmpty()); // no duplicate groups are available
-    EXPECT_EQ(resultsTable->rowCount(), 0); // no stale result rows are displayed
+    EXPECT_EQ(resultsTable->model()->rowCount(), 0); // no stale result rows are displayed
 }
 
 /// @brief Verifies that a result-row double-click is forwarded as a file-reveal request by `MainWindow`.
@@ -190,7 +191,7 @@ TEST(MainWindowTest, ClearExistingResult_WhenEmptyScanResultIsShown)
 /// `MainWindow::revealFileInSystemFileManagerRequested` that records the invocation count and path.
 ///
 /// @par Procedure
-/// Display the result and invoke the table's `cellDoubleClicked` signal for the second file's row.
+/// Display the result and invoke the table view's `doubleClicked` signal for the second file's row.
 ///
 /// @par Expected results
 /// - `revealFileInSystemFileManagerRequested` is emitted exactly once.
@@ -199,9 +200,10 @@ TEST(MainWindowTest, RequestFileReveal_WhenResultRowIsDoubleClicked)
 {
     MainWindow mainWindow;
     const ScanResult scanResult = test_helpers::createScanResultWithDuplicates();
-    auto* resultsTable = mainWindow.findChild<QTableWidget*>(QStringLiteral("results_TableWidget"));
+    auto* resultsTable = mainWindow.findChild<QTableView*>(QStringLiteral("results_TableView"));
 
     ASSERT_NE(resultsTable, nullptr);
+    ASSERT_NE(resultsTable->model(), nullptr);
 
     int revealRequestCount = 0;
     QString requestedAbsoluteFilePath;
@@ -213,9 +215,9 @@ TEST(MainWindowTest, RequestFileReveal_WhenResultRowIsDoubleClicked)
                      });
 
     mainWindow.showScanResult(scanResult);
-    ASSERT_EQ(resultsTable->rowCount(), 2);
+    ASSERT_EQ(resultsTable->model()->rowCount(), 2);
 
-    resultsTable->cellDoubleClicked(1, 2);
+    resultsTable->doubleClicked(resultsTable->model()->index(1, 2));
 
     const QString expectedAbsoluteFilePath = FileRecord{QStringLiteral("duplicate.txt"),QStringLiteral("C:/second"), 8}.getAbsoluteFilePath();
 
