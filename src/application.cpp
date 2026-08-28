@@ -1,4 +1,6 @@
 #include "application.h"
+#include "development_configuration_helper.h"
+
 #include <QApplication>
 #include <QDebug>
 #include <QStyleFactory>
@@ -10,6 +12,8 @@ Application::Application()
     applyLightTheme();
 
     model_ = std::make_unique<Model>();
+    // model_->addScanDirectory(DevelopmentConfigurationHelper::getInitialDirectoryScanPath()); // TODO remove before release
+
     view_ = std::make_unique<MainWindow>();
 
     controller_ = std::make_unique<Controller>(*model_, *view_);

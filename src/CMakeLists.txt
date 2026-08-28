@@ -6,6 +6,7 @@ qt_add_executable(${PROJECT_NAME}
         application.cpp application.h
         controller.cpp controller.h
         log_manager.cpp log_manager.h
+        development_configuration_helper.cpp development_configuration_helper.h
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE .)

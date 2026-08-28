@@ -1,6 +1,7 @@
 add_library(app_frontend
         main_window.cpp main_window.h main_window.ui
         results_tab.cpp results_tab.h results_tab.ui
+        scan_directories_tree_model.cpp scan_directories_tree_model.h
 )
 
 target_include_directories(app_frontend

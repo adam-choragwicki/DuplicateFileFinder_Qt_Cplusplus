@@ -6,7 +6,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QTemporaryDir>
-#include <QTreeWidget>
+#include <QTreeView>
 
 #include <gtest/gtest.h>
 
@@ -23,6 +23,16 @@ namespace
         {
             mainWindow.removeScanDirectory(scanRootPath);
         }
+    }
+
+    /// @brief Selects one directory-tree row and clears any preceding selection.
+    ///
+    /// @param directoriesTree Tree view whose selection is changed.
+    /// @param directoryIndex Model index representing the directory to select.
+    void selectDirectory(QTreeView& directoriesTree, const QModelIndex& directoryIndex)
+    {
+        directoriesTree.setCurrentIndex(directoryIndex);
+        directoriesTree.selectionModel()->select(directoryIndex, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
     }
 }
 
@@ -89,9 +99,10 @@ TEST(DirectoriesTabTest, AddNormalizedScanRoot_WhenDirectoryIsAdded)
     const QString expectedScanRootPath = QDir(scanRootPath).absolutePath();
     mainWindow.addScanDirectory(redundantScanRootPath);
 
-    const auto* directoriesTree = mainWindow.findChild<QTreeWidget*>(QStringLiteral("directories_TreeWidget"));
+    const auto* directoriesTree = mainWindow.findChild<QTreeView*>(QStringLiteral("directories_TreeView"));
     ASSERT_NE(directoriesTree, nullptr);
-    ASSERT_EQ(directoriesTree->topLevelItemCount(), 1);
+    ASSERT_NE(directoriesTree->model(), nullptr);
+    ASSERT_EQ(directoriesTree->model()->rowCount(), 1);
 
     const QStringList scanRootPaths = mainWindow.getScanDirectoryPaths();
     ASSERT_EQ(scanRootPaths.size(), 1);
@@ -123,26 +134,27 @@ TEST(DirectoriesTabTest, EnableDirectoryRemoval_OnlyWhenScanRootIsSelected)
     ASSERT_TRUE(QDir().mkpath(QDir(scanRootPath).filePath(QStringLiteral("child"))));
     mainWindow.addScanDirectory(scanRootPath);
 
-    auto* directoriesTree = mainWindow.findChild<QTreeWidget*>(QStringLiteral("directories_TreeWidget"));
+    auto* directoriesTree = mainWindow.findChild<QTreeView*>(QStringLiteral("directories_TreeView"));
     const auto* removeDirectoryButton = mainWindow.findChild<QPushButton*>(QStringLiteral("removeDirectory_PushButton"));
     ASSERT_NE(directoriesTree, nullptr);
     ASSERT_NE(removeDirectoryButton, nullptr);
-    ASSERT_EQ(directoriesTree->topLevelItemCount(), 1);
+    ASSERT_NE(directoriesTree->model(), nullptr);
+    ASSERT_EQ(directoriesTree->model()->rowCount(), 1);
 
-    QTreeWidgetItem* scanRootItem = directoriesTree->topLevelItem(0);
-    ASSERT_NE(scanRootItem, nullptr);
+    const QModelIndex scanRootIndex = directoriesTree->model()->index(0, 0);
+    ASSERT_TRUE(scanRootIndex.isValid());
     EXPECT_TRUE(removeDirectoryButton->isEnabled());
 
     directoriesTree->clearSelection();
     EXPECT_FALSE(removeDirectoryButton->isEnabled());
 
-    scanRootItem->setSelected(true);
+    selectDirectory(*directoriesTree, scanRootIndex);
     EXPECT_TRUE(removeDirectoryButton->isEnabled());
 
-    directoriesTree->itemExpanded(scanRootItem);
-    ASSERT_EQ(scanRootItem->childCount(), 1);
+    directoriesTree->expand(scanRootIndex);
+    ASSERT_EQ(directoriesTree->model()->rowCount(scanRootIndex), 1);
     directoriesTree->clearSelection();
-    scanRootItem->child(0)->setSelected(true);
+    selectDirectory(*directoriesTree, directoriesTree->model()->index(0, 0, scanRootIndex));
     EXPECT_FALSE(removeDirectoryButton->isEnabled());
 }
 
@@ -169,20 +181,21 @@ TEST(DirectoriesTabTest, KeepScanRoot_WhenChildDirectoryRemovalIsRequested)
     ASSERT_TRUE(QDir().mkpath(QDir(scanRootPath).filePath(QStringLiteral("child"))));
     mainWindow.addScanDirectory(scanRootPath);
 
-    auto* directoriesTree = mainWindow.findChild<QTreeWidget*>(QStringLiteral("directories_TreeWidget"));
+    auto* directoriesTree = mainWindow.findChild<QTreeView*>(QStringLiteral("directories_TreeView"));
     ASSERT_NE(directoriesTree, nullptr);
-    ASSERT_EQ(directoriesTree->topLevelItemCount(), 1);
+    ASSERT_NE(directoriesTree->model(), nullptr);
+    ASSERT_EQ(directoriesTree->model()->rowCount(), 1);
 
-    QTreeWidgetItem* scanRootItem = directoriesTree->topLevelItem(0);
-    directoriesTree->itemExpanded(scanRootItem);
-    ASSERT_EQ(scanRootItem->childCount(), 1);
+    const QModelIndex scanRootIndex = directoriesTree->model()->index(0, 0);
+    directoriesTree->expand(scanRootIndex);
+    ASSERT_EQ(directoriesTree->model()->rowCount(scanRootIndex), 1);
 
     directoriesTree->clearSelection();
-    scanRootItem->child(0)->setSelected(true);
+    selectDirectory(*directoriesTree, directoriesTree->model()->index(0, 0, scanRootIndex));
     mainWindow.removeSelectedScanDirectory();
 
-    ASSERT_EQ(directoriesTree->topLevelItemCount(), 1);
-    EXPECT_EQ(scanRootItem->childCount(), 1);
+    ASSERT_EQ(directoriesTree->model()->rowCount(), 1);
+    EXPECT_EQ(directoriesTree->model()->rowCount(scanRootIndex), 1);
 
     const QStringList scanRootPaths = mainWindow.getScanDirectoryPaths();
     ASSERT_EQ(scanRootPaths.size(), 1);
@@ -223,22 +236,26 @@ TEST(DirectoriesTabTest, PopulateChildDirectoriesOnce_WhenScanRootIsExpanded)
 
     mainWindow.addScanDirectory(scanRootPath);
 
-    auto* directoriesTree = mainWindow.findChild<QTreeWidget*>(QStringLiteral("directories_TreeWidget"));
+    auto* directoriesTree = mainWindow.findChild<QTreeView*>(QStringLiteral("directories_TreeView"));
     ASSERT_NE(directoriesTree, nullptr);
-    ASSERT_EQ(directoriesTree->topLevelItemCount(), 1);
+    ASSERT_NE(directoriesTree->model(), nullptr);
+    ASSERT_EQ(directoriesTree->model()->rowCount(), 1);
 
-    QTreeWidgetItem* scanRootItem = directoriesTree->topLevelItem(0);
-    ASSERT_EQ(scanRootItem->childCount(), 0);
+    const QModelIndex scanRootIndex = directoriesTree->model()->index(0, 0);
+    ASSERT_EQ(directoriesTree->model()->rowCount(scanRootIndex), 0);
 
-    directoriesTree->itemExpanded(scanRootItem);
+    directoriesTree->expand(scanRootIndex);
 
-    ASSERT_EQ(scanRootItem->childCount(), 2);
-    EXPECT_EQ(scanRootItem->child(0)->text(0).toStdString(), std::string("first"));
-    EXPECT_EQ(scanRootItem->child(1)->text(0).toStdString(), std::string("second"));
-    EXPECT_EQ(scanRootItem->child(0)->childIndicatorPolicy(), QTreeWidgetItem::ShowIndicator);
+    ASSERT_EQ(directoriesTree->model()->rowCount(scanRootIndex), 2);
+    const QModelIndex firstChildIndex = directoriesTree->model()->index(0, 0, scanRootIndex);
+    const QModelIndex secondChildIndex = directoriesTree->model()->index(1, 0, scanRootIndex);
+    EXPECT_EQ(firstChildIndex.data().toString().toStdString(), std::string("first"));
+    EXPECT_EQ(secondChildIndex.data().toString().toStdString(), std::string("second"));
+    EXPECT_TRUE(directoriesTree->model()->hasChildren(firstChildIndex));
 
-    directoriesTree->itemExpanded(scanRootItem);
-    EXPECT_EQ(scanRootItem->childCount(), 2);
+    directoriesTree->collapse(scanRootIndex);
+    directoriesTree->expand(scanRootIndex);
+    EXPECT_EQ(directoriesTree->model()->rowCount(scanRootIndex), 2);
 
     const QStringList scanRootPaths = mainWindow.getScanDirectoryPaths();
     ASSERT_EQ(scanRootPaths.size(), 1);

@@ -130,13 +130,7 @@
            </widget>
           </item>
           <item>
-           <widget class="QTreeWidget" name="directories_TreeWidget">
-            <column>
-             <property name="text">
-              <string>Path</string>
-             </property>
-            </column>
-           </widget>
+           <widget class="QTreeView" name="directories_TreeView"/>
           </item>
           <item>
            <widget class="QPushButton" name="startScan_PushButton">

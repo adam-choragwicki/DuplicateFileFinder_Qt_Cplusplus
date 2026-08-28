@@ -3,10 +3,9 @@
 #include "types/scan_type.h"
 #include "types/scan_result.h"
 
-#include <QFileInfo>
 #include <QMainWindow>
 
-class QTreeWidgetItem;
+class ScanDirectoriesTreeModel;
 
 QT_BEGIN_NAMESPACE
 
@@ -50,22 +49,16 @@ public:
 private:
     void initializeWindowGeometry();
     void initializeUI();
-    void initializeDirectoriesTree(); // TODO move it out of this class
+    void initializeDirectoriesTree();
     void populateScanTypeComboBox();
     void updateScanTypeDescription() const;
-    void populateDirectoryTreeItem(QTreeWidgetItem* directoryItem) const; // TODO move it out of this class
     void showAboutDialog();
 
     /// Enables directory actions according to whether scan roots exist and whether one top-level scan root is selected.
     void updateDirectoryActionStates();
 
-    [[nodiscard]] QTreeWidgetItem* createDirectoryTreeItem(const QString& directoryPath, const QString& displayedPath) const; // TODO move it out of this class
-    [[nodiscard]] static QFileInfoList findChildDirectories(const QString& directoryPath); // TODO move it out of this class
-    [[nodiscard]] QString getInitialDirectoryScanPath() const;
     void initializeResultsTabCloseButton();
 
-    static constexpr int directoryPathDataRole_ = Qt::UserRole; // TODO move it out of this class
-    static constexpr int directoryChildrenLoadedDataRole_ = Qt::UserRole + 1; // TODO move it out of this class
-
     Ui::MainWindow* ui;
+    ScanDirectoriesTreeModel* directoriesTreeModel_{};
 };
