@@ -2,28 +2,24 @@
 
 #include <QApplication>
 #include <QDir>
-#include <QFileInfo>
 #include <QStyle>
-
-namespace
-{
-    // Enumerate all immediate subdirectories that the tree should expose, including hidden and system
-    // directories but excluding the "." and ".." entries.
-    [[nodiscard]] QFileInfoList findChildDirectories(const QString& directoryPath)
-    {
-        constexpr QDir::Filters directoryFilters = QDir::Dirs
-                                                   | QDir::NoDotAndDotDot
-                                                   | QDir::Hidden
-                                                   | QDir::System;
-        constexpr QDir::SortFlags directorySorting = QDir::Name | QDir::IgnoreCase;
-
-        return QDir(directoryPath).entryInfoList(directoryFilters, directorySorting);
-    }
-}
 
 ScanDirectoriesTreeModel::ScanDirectoriesTreeModel(QObject* parent) : QAbstractItemModel(parent) {}
 
 ScanDirectoriesTreeModel::~ScanDirectoriesTreeModel() = default;
+
+QFileInfoList ScanDirectoriesTreeModel::findChildDirectories(const QString& directoryPath)
+{
+    // Enumerate all immediate subdirectories that the tree should expose, including hidden and system
+    // directories but excluding the "." and ".." entries.
+    constexpr QDir::Filters directoryFilters = QDir::Dirs
+                                               | QDir::NoDotAndDotDot
+                                               | QDir::Hidden
+                                               | QDir::System;
+    constexpr QDir::SortFlags directorySorting = QDir::Name | QDir::IgnoreCase;
+
+    return QDir(directoryPath).entryInfoList(directoryFilters, directorySorting);
+}
 
 QModelIndex ScanDirectoriesTreeModel::index(const int row, const int column, const QModelIndex& parent) const
 {
