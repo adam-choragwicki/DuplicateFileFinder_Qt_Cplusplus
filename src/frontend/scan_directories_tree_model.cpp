@@ -4,7 +4,9 @@
 #include <QDir>
 #include <QStyle>
 
-ScanDirectoriesTreeModel::ScanDirectoriesTreeModel(QObject* parent) : QAbstractItemModel(parent) {}
+ScanDirectoriesTreeModel::ScanDirectoriesTreeModel(QObject* parent) : QAbstractItemModel(parent),
+                                                                      directoryIcon_(QApplication::style()->standardIcon(QStyle::SP_DirIcon))
+{}
 
 ScanDirectoriesTreeModel::~ScanDirectoriesTreeModel() = default;
 
@@ -92,8 +94,7 @@ QVariant ScanDirectoriesTreeModel::data(const QModelIndex& index, const int role
             return node->displayText;
 
         case Qt::DecorationRole:
-            // Ask the current application style for the platform-appropriate directory icon.
-            return QApplication::style()->standardIcon(QStyle::SP_DirIcon);
+            return directoryIcon_;
 
         case Qt::ToolTipRole:
             // Tooltips favor platform-native separators for readability without changing the stored path.

@@ -2,6 +2,7 @@
 
 #include <QAbstractItemModel>
 #include <QFileInfo>
+#include <QIcon>
 
 #include <memory>
 #include <vector>
@@ -81,4 +82,6 @@ private:
 
     /// Owns both the configured scan roots and, recursively, every loaded descendant.
     std::vector<std::unique_ptr<DirectoryNode>> rootDirectories_;
+    /// Icon is cached because views request DecorationRole repeatedly while painting and scrolling.
+    const QIcon directoryIcon_;
 };
