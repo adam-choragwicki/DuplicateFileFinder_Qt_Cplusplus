@@ -1,20 +1,39 @@
 #include "scan_workflow_test_fixture.h"
 
 #include "file_content_scan_workflow.h"
+#include "file_hasher.h"
 #include "scan_summary/file_content_scan_summary.h"
 
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 
+#include <limits>
 #include <optional>
 #include <stop_token>
+#include <utility>
 #include <variant>
 
 namespace
 {
     class ScanByFileContentTest : public ScanWorkflowTest
-    {};
+    {
+    protected:
+        static constexpr qint64 forceLargeFileSamplingThresholdBytes = 1;
+        static constexpr qsizetype sampledTestFileSizeBytes = 4 * 1024 * 1024;
+
+        static FileContentScanWorkflow createScanWorkflow(
+            FileContentScanWorkflow::FileHashCalculator fileHashCalculator,
+            FileContentScanWorkflow::FileSampleHashCalculator fileSampleHashCalculator = &FileHasher::calculateFileSampleHash,
+            const qint64 fileSamplingThresholdBytes = std::numeric_limits<qint64>::max())
+        {
+            return FileContentScanWorkflow(FileContentScanWorkflow::HashingConfiguration{
+                std::move(fileHashCalculator),
+                std::move(fileSampleHashCalculator),
+                fileSamplingThresholdBytes
+            });
+        }
+    };
 }
 
 /// @brief Verifies file-content-based duplicate detection against the maintained smoke-test directory tree.
@@ -605,6 +624,305 @@ TEST_F(ScanByFileContentTest, CheckHashGroupingAndSizePruning_RepeatedAndUniqueS
     EXPECT_EQ(summary->getTotalAmountOfPotentiallyRecoverableBytes(), 8);
 }
 
+/// @brief Verifies that files below the configured size threshold bypass sampling.
+///
+/// @par Test setup
+/// Create an identical four-byte pair, set the sampling threshold to five bytes, and count both sample and full
+/// hash calculator calls.
+///
+/// @par Procedure
+/// Execute the workflow and inspect its duplicate result and calculator call counts.
+///
+/// @par Expected results
+/// Neither small file is sampled, both receive full hashes through the existing path, and the duplicate pair is
+/// returned.
+TEST_F(ScanByFileContentTest, BypassSampling_ForFilesBelowConfiguredThreshold)
+{
+    ASSERT_TRUE(writeFile("first.bin", "same"));
+    ASSERT_TRUE(writeFile("second.bin", "same"));
+
+    quint64 sampleHashCalculationCount = 0;
+    quint64 fullHashCalculationCount = 0;
+    const FileContentScanWorkflow scanWorkflow = createScanWorkflow(
+        [&fullHashCalculationCount](const FileRecord& file, const std::stop_token& stopToken)
+        {
+            ++fullHashCalculationCount;
+            return FileHasher::calculateFullFileHash(file, stopToken);
+        },
+        [&sampleHashCalculationCount](const FileRecord&, const std::stop_token&) -> std::optional<QByteArray>
+        {
+            ++sampleHashCalculationCount;
+            return QByteArray("unexpected-sample-hash");
+        },
+        5);
+
+    const ScanResult scanResult = scanWorkflow.execute(QStringList{getTemporaryScanRootPath()},
+                                                       std::stop_source().get_token(),
+                                                       ignoreProgressCallback);
+
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
+    ASSERT_EQ(scanResult.getDuplicateGroups().size(), 1);
+    EXPECT_EQ(sampleHashCalculationCount, 0);
+    EXPECT_EQ(fullHashCalculationCount, 2);
+}
+
+/// @brief Verifies that unique samples prevent unnecessary full hashing of large equal-size files.
+///
+/// @par Test setup
+/// Create three large equal-size files whose sampled prefixes differ. Force the production sampling path at the
+/// test files' size and wrap the full-hash calculator to count calls.
+///
+/// @par Procedure
+/// Execute the workflow, inspect its result and full-hash call count, and verify final hashing-phase progress.
+///
+/// @par Expected results
+/// The sample hashes rule out all three files, no full hash is calculated, no duplicates are reported, and all
+/// three candidates are nevertheless reported as processed.
+TEST_F(ScanByFileContentTest, PruneUniqueLargeFileSamples_WithoutCalculatingFullHashes)
+{
+    ASSERT_TRUE(writeFile("first.bin", QByteArray(sampledTestFileSizeBytes, 'A')));
+    ASSERT_TRUE(writeFile("second.bin", QByteArray(sampledTestFileSizeBytes, 'B')));
+    ASSERT_TRUE(writeFile("third.bin", QByteArray(sampledTestFileSizeBytes, 'C')));
+
+    quint64 fullHashCalculationCount = 0;
+    const FileContentScanWorkflow scanWorkflow = createScanWorkflow(
+        [&fullHashCalculationCount](const FileRecord& file, const std::stop_token& stopToken)
+        {
+            ++fullHashCalculationCount;
+            return FileHasher::calculateFullFileHash(file, stopToken);
+        },
+        &FileHasher::calculateFileSampleHash,
+        forceLargeFileSamplingThresholdBytes);
+
+    QList<ScanProgress> progressUpdates;
+    const ScanResult scanResult = scanWorkflow.execute(QStringList{getTemporaryScanRootPath()},
+                                                       std::stop_source().get_token(),
+                                                       [&progressUpdates](const ScanProgress& scanProgress)
+                                                       {
+                                                           progressUpdates.append(scanProgress);
+                                                       });
+
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithoutDuplicates);
+    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
+    EXPECT_EQ(fullHashCalculationCount, 0);
+
+    const auto finalHashingProgress = std::find_if(
+        progressUpdates.crbegin(),
+        progressUpdates.crend(),
+        [](const ScanProgress& scanProgress)
+        {
+            const auto* phase = std::get_if<FileContentScanPhase>(&scanProgress.scanPhase);
+            return phase && *phase == FileContentScanPhase::HashingDuplicateCandidateFiles;
+        });
+
+    ASSERT_NE(finalHashingProgress, progressUpdates.crend());
+    EXPECT_EQ(finalHashingProgress->processedFilesCount, 3);
+    EXPECT_EQ(finalHashingProgress->totalFilesCount, 3);
+}
+
+/// @brief Verifies that matching large-file samples remain subject to full hashing and exact verification.
+///
+/// @par Test setup
+/// Create two identical large files and one same-size file with a different sampled prefix. Count full-hash calls
+/// while using the production sample calculator.
+///
+/// @par Procedure
+/// Execute the workflow and compare the returned group with the identical pair.
+///
+/// @par Expected results
+/// The unique sampled file is pruned, both matching-sample files receive full hashes, and the identical pair is
+/// returned as the sole duplicate group.
+TEST_F(ScanByFileContentTest, FullyVerifyLargeFiles_WithMatchingSamples)
+{
+    const QByteArray duplicateContents(sampledTestFileSizeBytes, 'A');
+    ASSERT_TRUE(writeFile("first.bin", duplicateContents));
+    ASSERT_TRUE(writeFile("second.bin", duplicateContents));
+    ASSERT_TRUE(writeFile("different.bin", QByteArray(sampledTestFileSizeBytes, 'B')));
+
+    quint64 fullHashCalculationCount = 0;
+    const FileContentScanWorkflow scanWorkflow = createScanWorkflow(
+        [&fullHashCalculationCount](const FileRecord& file, const std::stop_token& stopToken)
+        {
+            ++fullHashCalculationCount;
+            return FileHasher::calculateFullFileHash(file, stopToken);
+        },
+        &FileHasher::calculateFileSampleHash,
+        forceLargeFileSamplingThresholdBytes);
+
+    const QString scanRootPath = getTemporaryScanRootPath();
+    const ScanResult scanResult = scanWorkflow.execute(QStringList{scanRootPath},
+                                                       std::stop_source().get_token(),
+                                                       ignoreProgressCallback);
+
+    const DuplicateGroup expectedDuplicateGroup = createExpectedDuplicateGroup({
+        createExpectedFileRecord(scanRootPath, "first.bin", duplicateContents.size()),
+        createExpectedFileRecord(scanRootPath, "second.bin", duplicateContents.size())
+    });
+
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
+    ASSERT_EQ(scanResult.getDuplicateGroups().size(), 1);
+    EXPECT_TRUE(containsDuplicateGroup(scanResult, expectedDuplicateGroup));
+    EXPECT_EQ(fullHashCalculationCount, 2);
+}
+
+/// @brief Verifies that differences outside the sampled prefix cannot produce false duplicate results.
+///
+/// @par Test setup
+/// Create two large files with identical sampled prefixes, but change one byte beyond that prefix. Count calls to
+/// the production full-hash calculator.
+///
+/// @par Procedure
+/// Execute the workflow and inspect both the result and full-hash call count.
+///
+/// @par Expected results
+/// Matching samples retain both candidates, full hashing reads both complete files, and their off-sample
+/// difference prevents a duplicate group from being reported.
+TEST_F(ScanByFileContentTest, RejectLargeFilesDifferingOutsideSampledPrefix_AfterFullHashing)
+{
+    QByteArray firstContents(sampledTestFileSizeBytes, 'A');
+    QByteArray secondContents = firstContents;
+    secondContents[1024 * 1024 + 128 * 1024] = 'B';
+
+    ASSERT_TRUE(writeFile("first.bin", firstContents));
+    ASSERT_TRUE(writeFile("second.bin", secondContents));
+
+    quint64 fullHashCalculationCount = 0;
+    const FileContentScanWorkflow scanWorkflow = createScanWorkflow(
+        [&fullHashCalculationCount](const FileRecord& file, const std::stop_token& stopToken)
+        {
+            ++fullHashCalculationCount;
+            return FileHasher::calculateFullFileHash(file, stopToken);
+        },
+        &FileHasher::calculateFileSampleHash,
+        forceLargeFileSamplingThresholdBytes);
+
+    const ScanResult scanResult = scanWorkflow.execute(QStringList{getTemporaryScanRootPath()},
+                                                       std::stop_source().get_token(),
+                                                       ignoreProgressCallback);
+
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithoutDuplicates);
+    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
+    EXPECT_EQ(fullHashCalculationCount, 2);
+}
+
+/// @brief Verifies correctness when unrelated large files receive the same sample and full hash values.
+///
+/// @par Test setup
+/// Create one identical pair and one different equal-size file. Inject a sample calculator returning one
+/// artificial value for every candidate and a full-hash calculator returning a second artificial value.
+///
+/// @par Procedure
+/// Execute the workflow and compare the result with the genuine duplicate pair.
+///
+/// @par Expected results
+/// Both collision layers merely retain additional candidates; final byte comparison prevents a false duplicate,
+/// and only the identical pair is returned.
+TEST_F(ScanByFileContentTest, KeepCorrectResults_WhenLargeFileSampleAndFullHashesCollide)
+{
+    ASSERT_TRUE(writeFile("first.bin", "AAAA"));
+    ASSERT_TRUE(writeFile("second.bin", "AAAA"));
+    ASSERT_TRUE(writeFile("different.bin", "BBBB"));
+
+    quint64 fullHashCalculationCount = 0;
+    const FileContentScanWorkflow scanWorkflow = createScanWorkflow(
+        [&fullHashCalculationCount](const FileRecord&, const std::stop_token&) -> std::optional<QByteArray>
+        {
+            ++fullHashCalculationCount;
+            return QByteArray("forced-full-hash-collision");
+        },
+        [](const FileRecord&, const std::stop_token&) -> std::optional<QByteArray>
+        {
+            return QByteArray("forced-sample-hash-collision");
+        },
+        forceLargeFileSamplingThresholdBytes);
+
+    const QString scanRootPath = getTemporaryScanRootPath();
+    const ScanResult scanResult = scanWorkflow.execute(QStringList{scanRootPath},
+                                                       std::stop_source().get_token(),
+                                                       ignoreProgressCallback);
+
+    const DuplicateGroup expectedDuplicateGroup = createExpectedDuplicateGroup({
+        createExpectedFileRecord(scanRootPath, "first.bin", 4),
+        createExpectedFileRecord(scanRootPath, "second.bin", 4)
+    });
+
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
+    ASSERT_EQ(scanResult.getDuplicateGroups().size(), 1);
+    EXPECT_TRUE(containsDuplicateGroup(scanResult, expectedDuplicateGroup));
+    EXPECT_EQ(fullHashCalculationCount, 3);
+}
+
+/// @brief Verifies that a large-file sampling failure cannot yield an incomplete successful result.
+///
+/// @par Test setup
+/// Create two equal-size files and inject a sample calculator that fails without requesting cancellation.
+///
+/// @par Procedure
+/// Execute the workflow with forced large-file sampling.
+///
+/// @par Expected results
+/// The scan fails, returns no unverified groups, and never invokes the full-hash calculator.
+TEST_F(ScanByFileContentTest, ReturnFailure_WhenLargeFileSamplingFails)
+{
+    ASSERT_TRUE(writeFile("first.bin", "AAAA"));
+    ASSERT_TRUE(writeFile("second.bin", "BBBB"));
+
+    quint64 fullHashCalculationCount = 0;
+    const FileContentScanWorkflow scanWorkflow = createScanWorkflow(
+        [&fullHashCalculationCount](const FileRecord&, const std::stop_token&) -> std::optional<QByteArray>
+        {
+            ++fullHashCalculationCount;
+            return QByteArray("unexpected-full-hash");
+        },
+        [](const FileRecord&, const std::stop_token&) -> std::optional<QByteArray>
+        {
+            return std::nullopt;
+        },
+        forceLargeFileSamplingThresholdBytes);
+
+    const ScanResult scanResult = scanWorkflow.execute(QStringList{getTemporaryScanRootPath()},
+                                                       std::stop_source().get_token(),
+                                                       ignoreProgressCallback);
+
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Failed);
+    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
+    EXPECT_EQ(fullHashCalculationCount, 0);
+}
+
+/// @brief Verifies cancellation requested from within large-file sampling.
+///
+/// @par Test setup
+/// Create two equal-size files and inject a sample calculator that requests stop before returning no hash.
+///
+/// @par Procedure
+/// Execute the workflow with the calculator sharing its stop source with the workflow.
+///
+/// @par Expected results
+/// The missing sample is classified as cancellation rather than failure, and no unverified group is returned.
+TEST_F(ScanByFileContentTest, ReturnCancellation_WhenStopIsRequestedDuringLargeFileSampling)
+{
+    ASSERT_TRUE(writeFile("first.bin", "AAAA"));
+    ASSERT_TRUE(writeFile("second.bin", "BBBB"));
+
+    std::stop_source stopSource;
+    const FileContentScanWorkflow scanWorkflow = createScanWorkflow(
+        &FileHasher::calculateFullFileHash,
+        [&stopSource](const FileRecord&, const std::stop_token&) -> std::optional<QByteArray>
+        {
+            stopSource.request_stop();
+            return std::nullopt;
+        },
+        forceLargeFileSamplingThresholdBytes);
+
+    const ScanResult scanResult = scanWorkflow.execute(QStringList{getTemporaryScanRootPath()},
+                                                       stopSource.get_token(),
+                                                       ignoreProgressCallback);
+
+    EXPECT_TRUE(stopSource.stop_requested());
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::Cancelled);
+    EXPECT_TRUE(scanResult.getDuplicateGroups().isEmpty());
+}
+
 /// @brief Verifies exact byte comparison when unrelated files share the same calculated hash.
 ///
 /// @par Test setup
@@ -638,7 +956,7 @@ TEST_F(ScanByFileContentTest, CheckHashCollision_MatchingHashBucketIsPartitioned
         createExpectedFileRecord(scanRootPath, "d/second-b", 4)
     });
 
-    const FileContentScanWorkflow scanWorkflow(
+    const FileContentScanWorkflow scanWorkflow = createScanWorkflow(
         [](const FileRecord&, const std::stop_token&) -> std::optional<QByteArray>
         {
             // Returning one hash for every file simulates a cryptographic hash collision deterministically.

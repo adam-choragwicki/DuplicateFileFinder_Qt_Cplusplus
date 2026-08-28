@@ -11,13 +11,19 @@
 #include <utility>
 
 FileContentScanWorkflow::FileContentScanWorkflow()
-    : fileHashCalculator_(&FileHasher::calculateFileHash) // dependency injection for easy hash collision testing
+    : FileContentScanWorkflow(HashingConfiguration{&FileHasher::calculateFullFileHash,
+                                                   &FileHasher::calculateFileSampleHash,
+                                                   defaultFileSamplingThresholdBytes_})
 {}
 
-FileContentScanWorkflow::FileContentScanWorkflow(const FileHashCalculator& fileHashCalculator)
-    : fileHashCalculator_(fileHashCalculator)
+FileContentScanWorkflow::FileContentScanWorkflow(HashingConfiguration hashingConfiguration)
+    : fileHashCalculator_(std::move(hashingConfiguration.fileHashCalculator_)),
+      fileSampleHashCalculator_(std::move(hashingConfiguration.fileSampleHashCalculator_)),
+      fileSamplingThresholdBytes_(hashingConfiguration.fileSamplingThresholdBytes_)
 {
     Q_ASSERT(fileHashCalculator_ != nullptr);
+    Q_ASSERT(fileSampleHashCalculator_ != nullptr);
+    Q_ASSERT(fileSamplingThresholdBytes_ > 0);
 }
 
 ScanResult FileContentScanWorkflow::execute(const QStringList& rootDirectoryPaths,
@@ -173,14 +179,151 @@ FileContentScanWorkflow::EqualSizeCandidateStageResult FileContentScanWorkflow::
     };
 }
 
+FileContentScanWorkflow::SampleHashCandidateSelectionResult FileContentScanWorkflow::selectSampleHashCandidates(const QList<FileRecord>& equalSizeFiles,
+                                                                                                                const quint64 equalSizeCandidateFilesCount,
+                                                                                                                quint64& processedCandidateFilesCount,
+                                                                                                                const std::stop_token& stopToken,
+                                                                                                                const ScanProgressCallback& scanProgressCallback) const
+{
+    QHash<QByteArray, QList<FileRecord>> filesGroupedBySampleHash;
+
+    // Prefix hashes are only a prefilter: a unique value rules out an identical peer, while every matching value
+    // remains inconclusive and proceeds to full-file hashing.
+    for (const FileRecord& file: equalSizeFiles)
+    {
+        if (stopToken.stop_requested())
+        {
+            return {.status_ = ContentScanStageStatus::Cancelled, .candidateFiles_ = {}};
+        }
+
+        const std::optional<QByteArray> fileSampleHash = fileSampleHashCalculator_(file, stopToken);
+
+        if (!fileSampleHash.has_value())
+        {
+            if (stopToken.stop_requested())
+            {
+                return {.status_ = ContentScanStageStatus::Cancelled, .candidateFiles_ = {}};
+            }
+
+            qWarning() << "Content scan cannot produce a complete result; sampling failed for:" << file.getAbsoluteFilePath();
+            return {.status_ = ContentScanStageStatus::Failed, .candidateFiles_ = {}};
+        }
+
+        filesGroupedBySampleHash[*fileSampleHash].append(file);
+    }
+
+    QList<FileRecord> sampleHashCandidates;
+
+    for (auto sampleHashGroupIterator = filesGroupedBySampleHash.begin(); sampleHashGroupIterator != filesGroupedBySampleHash.end(); ++sampleHashGroupIterator)
+    {
+        QList<FileRecord>& filesWithMatchingSampleHash = sampleHashGroupIterator.value();
+
+        if (filesWithMatchingSampleHash.size() >= 2)
+        {
+            sampleHashCandidates.append(std::move(filesWithMatchingSampleHash));
+            continue;
+        }
+
+        ++processedCandidateFilesCount;
+
+        scanProgressCallback({
+            .scanPhase = FileContentScanPhase::HashingDuplicateCandidateFiles,
+            .processedFilesCount = processedCandidateFilesCount,
+            .totalFilesCount = equalSizeCandidateFilesCount
+        });
+
+        if (stopToken.stop_requested())
+        {
+            return {.status_ = ContentScanStageStatus::Cancelled, .candidateFiles_ = {}};
+        }
+    }
+
+    return {.status_ = ContentScanStageStatus::Completed, .candidateFiles_ = std::move(sampleHashCandidates)};
+}
+
+FileContentScanWorkflow::MatchingHashCandidateStageResult FileContentScanWorkflow::hashFullFileCandidates(const QList<FileRecord>& fullHashCandidates,
+                                                                                                          const quint64 equalSizeCandidateFilesCount,
+                                                                                                          quint64& processedCandidateFilesCount,
+                                                                                                          const std::stop_token& stopToken,
+                                                                                                          const ScanProgressCallback& scanProgressCallback) const
+{
+    QHash<QByteArray, QList<FileRecord>> filesGroupedByFullHash;
+
+    for (const FileRecord& file: fullHashCandidates)
+    {
+        if (stopToken.stop_requested())
+        {
+            return {.status_ = ContentScanStageStatus::Cancelled};
+        }
+
+        const std::optional<QByteArray> fullFileHash = fileHashCalculator_(file, stopToken);
+
+        if (!fullFileHash.has_value())
+        {
+            if (stopToken.stop_requested())
+            {
+                return {.status_ = ContentScanStageStatus::Cancelled};
+            }
+
+            qWarning() << "Content scan cannot produce a complete result; hashing failed for:" << file.getAbsoluteFilePath();
+            return {.status_ = ContentScanStageStatus::Failed};
+        }
+
+        filesGroupedByFullHash[*fullFileHash].append(file);
+        ++processedCandidateFilesCount;
+
+        scanProgressCallback({
+            .scanPhase = FileContentScanPhase::HashingDuplicateCandidateFiles,
+            .processedFilesCount = processedCandidateFilesCount,
+            .totalFilesCount = equalSizeCandidateFilesCount
+        });
+    }
+
+    MatchingHashCandidateGroups matchingHashCandidateGroups;
+    quint64 matchingHashCandidateFilesCount = 0;
+
+    for (auto fullHashGroupIterator = filesGroupedByFullHash.cbegin(); fullHashGroupIterator != filesGroupedByFullHash.cend(); ++fullHashGroupIterator)
+    {
+        if (stopToken.stop_requested())
+        {
+            return {.status_ = ContentScanStageStatus::Cancelled};
+        }
+
+        // A full hash held by only one file cannot represent a duplicate group.
+        if (fullHashGroupIterator.value().size() < 2)
+        {
+            continue;
+        }
+
+        matchingHashCandidateFilesCount += static_cast<quint64>(fullHashGroupIterator.value().size());
+        matchingHashCandidateGroups.append(fullHashGroupIterator.value());
+    }
+
+    return {
+        .status_ = ContentScanStageStatus::Completed,
+        .candidateGroups_ = std::move(matchingHashCandidateGroups),
+        .candidateFilesCount_ = matchingHashCandidateFilesCount
+    };
+}
+
 FileContentScanWorkflow::MatchingHashCandidateStageResult FileContentScanWorkflow::hashEqualSizeCandidates(const FilesGroupedBySize& filesGroupedBySize,
                                                                                                            const quint64 equalSizeCandidateFilesCount,
                                                                                                            const std::stop_token& stopToken,
                                                                                                            const ScanProgressCallback& scanProgressCallback) const
 {
     MatchingHashCandidateGroups matchingHashCandidateGroups;
-    quint64 hashedCandidateFilesCount = 0;
+    quint64 processedCandidateFilesCount = 0;
     quint64 matchingHashCandidateFilesCount = 0;
+
+    // Every exit path preserves the matching-hash candidate groups collected before cancellation or failure.
+    const auto finishScanStage = [&](const ContentScanStageStatus status)
+    {
+        return MatchingHashCandidateStageResult{
+            .status_ = status,
+            .candidateGroups_ = std::move(matchingHashCandidateGroups),
+            .candidateFilesCount_ = matchingHashCandidateFilesCount
+        };
+    };
 
     scanProgressCallback({
         .scanPhase = FileContentScanPhase::HashingDuplicateCandidateFiles,
@@ -192,11 +335,7 @@ FileContentScanWorkflow::MatchingHashCandidateStageResult FileContentScanWorkflo
     {
         if (stopToken.stop_requested())
         {
-            return {
-                .status_ = ContentScanStageStatus::Cancelled,
-                .candidateGroups_ = std::move(matchingHashCandidateGroups),
-                .candidateFilesCount_ = matchingHashCandidateFilesCount
-            };
+            return finishScanStage(ContentScanStageStatus::Cancelled);
         }
 
         const QList<FileRecord>& equalSizeFiles = sizeGroupIterator.value();
@@ -207,86 +346,42 @@ FileContentScanWorkflow::MatchingHashCandidateStageResult FileContentScanWorkflo
             continue;
         }
 
-        QHash<QByteArray, QList<FileRecord>> filesGroupedByHash;
+        // Direct full-file hashing is the normal path. Only large files first pass through the sample-hash
+        // prefilter, which removes candidates whose prefix hash is unique within their equal-size group.
+        QList<FileRecord> filesToFullyHash = equalSizeFiles;
 
-        for (const FileRecord& file: equalSizeFiles)
+        if (equalSizeFiles.constFirst().getSizeBytes() >= fileSamplingThresholdBytes_)
         {
-            if (stopToken.stop_requested())
+            const SampleHashCandidateSelectionResult sampleHashCandidates = selectSampleHashCandidates(equalSizeFiles,
+                                                                                                       equalSizeCandidateFilesCount,
+                                                                                                       processedCandidateFilesCount,
+                                                                                                       stopToken,
+                                                                                                       scanProgressCallback);
+
+            if (sampleHashCandidates.status_ != ContentScanStageStatus::Completed)
             {
-                return {
-                    .status_ = ContentScanStageStatus::Cancelled,
-                    .candidateGroups_ = std::move(matchingHashCandidateGroups),
-                    .candidateFilesCount_ = matchingHashCandidateFilesCount
-                };
+                return finishScanStage(sampleHashCandidates.status_);
             }
 
-            const std::optional<QByteArray> fileHash = fileHashCalculator_(file, stopToken);
-
-            if (!fileHash.has_value())
-            {
-                if (stopToken.stop_requested())
-                {
-                    return {
-                        .status_ = ContentScanStageStatus::Cancelled,
-                        .candidateGroups_ = std::move(matchingHashCandidateGroups),
-                        .candidateFilesCount_ = matchingHashCandidateFilesCount
-                    };
-                }
-
-                qWarning() << "Content scan cannot produce a complete result; hashing failed for:" << file.getAbsoluteFilePath();
-                return {
-                    .status_ = ContentScanStageStatus::Failed,
-                    .candidateGroups_ = std::move(matchingHashCandidateGroups),
-                    .candidateFilesCount_ = matchingHashCandidateFilesCount
-                };
-            }
-
-            filesGroupedByHash[*fileHash].append(file);
-            ++hashedCandidateFilesCount;
-
-            scanProgressCallback({
-                .scanPhase = FileContentScanPhase::HashingDuplicateCandidateFiles,
-                .processedFilesCount = hashedCandidateFilesCount,
-                .totalFilesCount = equalSizeCandidateFilesCount
-            });
+            filesToFullyHash = sampleHashCandidates.candidateFiles_;
         }
 
-        if (stopToken.stop_requested())
+        const MatchingHashCandidateStageResult matchingHashCandidates = hashFullFileCandidates(filesToFullyHash,
+                                                                                               equalSizeCandidateFilesCount,
+                                                                                               processedCandidateFilesCount,
+                                                                                               stopToken,
+                                                                                               scanProgressCallback);
+
+        if (matchingHashCandidates.status_ != ContentScanStageStatus::Completed)
         {
-            return {
-                .status_ = ContentScanStageStatus::Cancelled,
-                .candidateGroups_ = std::move(matchingHashCandidateGroups),
-                .candidateFilesCount_ = matchingHashCandidateFilesCount
-            };
+            return finishScanStage(matchingHashCandidates.status_);
         }
 
-        for (auto hashGroupIterator = filesGroupedByHash.cbegin(); hashGroupIterator != filesGroupedByHash.cend(); ++hashGroupIterator)
-        {
-            if (stopToken.stop_requested())
-            {
-                return {
-                    .status_ = ContentScanStageStatus::Cancelled,
-                    .candidateGroups_ = std::move(matchingHashCandidateGroups),
-                    .candidateFilesCount_ = matchingHashCandidateFilesCount
-                };
-            }
-
-            // A hash held by only one file cannot represent a duplicate group.
-            if (hashGroupIterator.value().size() < 2)
-            {
-                continue;
-            }
-
-            matchingHashCandidateFilesCount += static_cast<quint64>(hashGroupIterator.value().size());
-            matchingHashCandidateGroups.append(hashGroupIterator.value());
-        }
+        matchingHashCandidateFilesCount += matchingHashCandidates.candidateFilesCount_;
+        matchingHashCandidateGroups.append(matchingHashCandidates.candidateGroups_);
     }
 
-    return {
-        .status_ = ContentScanStageStatus::Completed,
-        .candidateGroups_ = std::move(matchingHashCandidateGroups),
-        .candidateFilesCount_ = matchingHashCandidateFilesCount
-    };
+    return finishScanStage(ContentScanStageStatus::Completed);
 }
 
 FileContentScanWorkflow::ContentScanStageStatus FileContentScanWorkflow::assignCandidateToVerifiedContentGroup(const FileRecord& duplicateCandidateFile,
