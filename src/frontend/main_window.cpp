@@ -94,8 +94,8 @@ void MainWindow::initializeDirectoriesTree()
 
 void MainWindow::populateScanTypeComboBox()
 {
-    ui->scanType_ComboBox->addItem("By file name", QVariant::fromValue(ScanType::ByFileName));
     ui->scanType_ComboBox->addItem("By file content", QVariant::fromValue(ScanType::ByFileContent));
+    ui->scanType_ComboBox->addItem("By file name", QVariant::fromValue(ScanType::ByFileName));
 
     // Center align text
     for (int i = 0; i < ui->scanType_ComboBox->count(); ++i)
@@ -103,7 +103,6 @@ void MainWindow::populateScanTypeComboBox()
         ui->scanType_ComboBox->setItemData(i, Qt::AlignCenter, Qt::TextAlignmentRole);
     }
 
-    ui->scanType_ComboBox->setCurrentIndex(0); // choose "By file name"
     updateScanTypeDescription();
 }
 

@@ -73,7 +73,7 @@ private:
     [[nodiscard]] static bool isSameDirectoryOrSubdirectoryOf(const QString& directoryPath, const QString& possibleParentDirectoryPath);
 
     QStringList scanDirectoryPaths_;
-    ScanType scanType_{ScanType::ByFileName};
+    ScanType scanType_{ScanType::ByFileContent};
     ScanState scanState_{ScanState::Idle};
     std::optional<ScanProgress> scanProgress_;
     std::optional<ScanResult> latestScanResult_;

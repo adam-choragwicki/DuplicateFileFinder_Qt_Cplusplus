@@ -201,15 +201,16 @@ TEST(ControllerIntegrationTest, RejectScanAndExplainReason_WhenNoDirectoriesAreS
 ///
 /// @par Test setup
 /// Create two differently named files with identical contents below a temporary root. Construct `Model`,
-/// `MainWindow`, and `Controller`, add the root to the model, select content scanning in the window, and locate
-/// the Start control and result-related widgets.
+/// `MainWindow`, and `Controller`, add the root to the model, and locate the scan-type, Start, and result-related
+/// widgets without changing the initial scan type.
 ///
 /// @par Procedure
 /// Click Start scan and process Qt events until duplicate groups are displayed or the timeout expires. Then
 /// inspect the window state, result table, and file records produced by the asynchronous scan.
 ///
 /// @par Expected results
-/// - The controller receives the Start request and runs the selected content workflow to completion.
+/// - The model and combo box initially select file-content scanning.
+/// - The controller receives the Start request and runs the default content workflow to completion.
 /// - One duplicate group containing both source files is displayed as two result rows.
 /// - The Results tab becomes visible and active, and HTML export becomes enabled.
 /// - No modal outcome dialog remains open after a successful scan with duplicates.
@@ -240,9 +241,8 @@ TEST_F(ApplicationScanIntegrationTest, DisplayDuplicateResults_WhenContentScanIs
     ASSERT_NE(resultsTable, nullptr);
     ASSERT_NE(resultsTable->model(), nullptr);
 
-    const int contentScanIndex = scanTypeComboBox->findData(QVariant::fromValue(ScanType::ByFileContent));
-    ASSERT_GE(contentScanIndex, 0);
-    scanTypeComboBox->setCurrentIndex(contentScanIndex);
+    ASSERT_EQ(scanTypeComboBox->currentIndex(), 0);
+    ASSERT_EQ(mainWindow.getScanTypeFromComboBox(), ScanType::ByFileContent);
     ASSERT_EQ(model.getScanType(), ScanType::ByFileContent);
 
     mainWindow.show();
