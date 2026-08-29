@@ -294,8 +294,9 @@ TEST(ResultsTabTest, DisplayAdaptiveFileSizeUnits_WhenFileSizesSpanMultipleUnits
 /// @brief Verifies that sorting reorders complete duplicate groups rather than individual table rows.
 ///
 /// @par Test setup
-/// Create three groups of three files whose reference filenames, directories, and sizes produce different
-/// group orders. Give every file a distinct name so movement within or between groups is observable.
+/// Select the C locale, then create three groups of three files whose reference filenames, directories, and
+/// sizes produce different group orders. Give every file a distinct name so movement within or between groups
+/// is observable.
 ///
 /// @par Procedure
 /// Display the groups, activate one sortable column header, and compare the resulting filename sequence
@@ -308,6 +309,7 @@ TEST(ResultsTabTest, DisplayAdaptiveFileSizeUnits_WhenFileSizesSpanMultipleUnits
 /// - Every duplicate remains adjacent to its reference file and retains its position within the group.
 TEST(ResultsTabTest, KeepDuplicateGroupsTogether_WhenResultsAreSorted)
 {
+    const test_helpers::ScopedDefaultLocale defaultLocale{QLocale::c()};
     ResultsTab resultsTab;
     const DuplicateGroup fileTwoGroup = createDuplicateGroup({FileRecord{QStringLiteral("file2.txt"), QStringLiteral("C:/second"), 2048},
                                                               FileRecord{QStringLiteral("file2-copy-a.txt"), QStringLiteral("C:/second/a"), 2048},
@@ -347,8 +349,8 @@ TEST(ResultsTabTest, KeepDuplicateGroupsTogether_WhenResultsAreSorted)
 /// @brief Verifies sort-direction toggling and natural numeric ordering of filenames.
 ///
 /// @par Test setup
-/// Create two groups whose reference files are named `file2.txt` and `file10.txt`. Activate the directory
-/// column first so the filename column is not the current sort column.
+/// Select the C locale and create two groups whose reference files are named `file2.txt` and `file10.txt`.
+/// Activate the directory column first so the filename column is not the current sort column.
 ///
 /// @par Procedure
 /// Activate the filename header once, inspect the row and sort-indicator order, then activate the same
@@ -360,6 +362,7 @@ TEST(ResultsTabTest, KeepDuplicateGroupsTogether_WhenResultsAreSorted)
 /// - The header indicator reports the filename column and the active direction after each activation.
 TEST(ResultsTabTest, ToggleSortOrder_WhenSameHeaderIsClicked)
 {
+    const test_helpers::ScopedDefaultLocale defaultLocale{QLocale::c()};
     ResultsTab resultsTab;
     const DuplicateGroup fileTenGroup = createDuplicateGroup({FileRecord{QStringLiteral("file10.txt"), QStringLiteral("C:/second"), 1024},
                                                               FileRecord{QStringLiteral("file10-copy.txt"), QStringLiteral("C:/second/copy"), 1024}});

@@ -16,7 +16,7 @@ namespace
 ///
 /// @par Test setup
 /// Use the repository smoke-test tree and construct the expected three-file and two-file duplicate groups from
-/// their known paths and sizes.
+/// their known paths and LF-normalized sizes.
 ///
 /// @par Procedure
 /// Execute `FileNameScanWorkflow` over the smoke-test root and inspect its outcome, groups, and summary variant.
@@ -28,14 +28,14 @@ TEST_F(ScanByFileNameTest, CheckDuplicateGroups_SmokeTest)
     const QString scanRootPath = getSmokeTestScanRootPath();
 
     const DuplicateGroup expectedThreeFileDuplicateGroup = createExpectedDuplicateGroup({
-        createExpectedFileRecord(scanRootPath, "dir1/duplicate_three.txt", 52),
-        createExpectedFileRecord(scanRootPath, "dir2/duplicate_three.txt", 91),
-        createExpectedFileRecord(scanRootPath, "dir3/duplicate_three.txt", 52)
+        createExpectedFileRecord(scanRootPath, "dir1/duplicate_three.txt", 51),
+        createExpectedFileRecord(scanRootPath, "dir2/duplicate_three.txt", 90),
+        createExpectedFileRecord(scanRootPath, "dir3/duplicate_three.txt", 51)
     });
 
     const DuplicateGroup expectedTwoFileDuplicateGroup = createExpectedDuplicateGroup({
-        createExpectedFileRecord(scanRootPath, "dir1/duplicate_two.txt", 50),
-        createExpectedFileRecord(scanRootPath, "dir2/duplicate_two.txt", 51)
+        createExpectedFileRecord(scanRootPath, "dir1/duplicate_two.txt", 49),
+        createExpectedFileRecord(scanRootPath, "dir2/duplicate_two.txt", 50)
     });
 
     const ScanResult scanResult = FileNameScanWorkflow().execute(QStringList{scanRootPath},

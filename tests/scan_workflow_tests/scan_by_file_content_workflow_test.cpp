@@ -39,8 +39,8 @@ namespace
 /// @brief Verifies file-content-based duplicate detection against the maintained smoke-test directory tree.
 ///
 /// @par Test setup
-/// Use the repository smoke-test tree and construct the expected group from the two known files with identical
-/// contents but different names and extensions.
+/// Use the repository smoke-test tree and construct the expected group from the two known LF-normalized files
+/// with identical contents but different names and extensions.
 ///
 /// @par Procedure
 /// Execute `FileContentScanWorkflow`, compare the returned group with the expected records, and inspect the
@@ -54,8 +54,8 @@ TEST_F(ScanByFileContentTest, CheckDuplicateGroups_SmokeTest)
     const QString scanRootPath = getSmokeTestScanRootPath();
 
     const DuplicateGroup expectedDuplicateGroup = createExpectedDuplicateGroup({
-        createExpectedFileRecord(scanRootPath, "dir1/unique_1.txt", 47),
-        createExpectedFileRecord(scanRootPath, "dir2/unique_2.log", 47)
+        createExpectedFileRecord(scanRootPath, "dir1/unique_1.txt", 46),
+        createExpectedFileRecord(scanRootPath, "dir2/unique_2.log", 46)
     });
 
     const ScanResult scanResult = FileContentScanWorkflow().execute(QStringList{scanRootPath},

@@ -5,6 +5,7 @@
 #include <QColor>
 #include <QCollator>
 #include <QFont>
+#include <QLocale>
 
 #include <algorithm>
 
@@ -217,7 +218,14 @@ Qt::SortOrder DuplicateResultsTableModel::getSortOrder() const
 
 void DuplicateResultsTableModel::sortGroups()
 {
-    QCollator collator;
+    // The C locale uses lexical collation on some platforms even when numeric mode is requested. Fall back to
+    // English collation there so natural filename ordering remains available in C-locale environments, while
+    // retaining the user's collation rules for every fully featured locale.
+    const QLocale defaultCollationLocale = QLocale().collation();
+    const QLocale collationLocale = defaultCollationLocale.language() == QLocale::C
+                                        ? QLocale(QLocale::English, QLocale::UnitedStates)
+                                        : defaultCollationLocale;
+    QCollator collator(collationLocale);
     collator.setCaseSensitivity(Qt::CaseInsensitive);
     collator.setNumericMode(true);
 
