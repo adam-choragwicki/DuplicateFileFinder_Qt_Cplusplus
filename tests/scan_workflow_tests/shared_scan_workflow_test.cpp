@@ -375,8 +375,8 @@ TYPED_TEST(SharedScanWorkflowTest, CheckFilesScannedOnce_RepeatedAndNestedRoots)
 /// @brief Verifies that a file already unreadable during discovery is logged, counted, and skipped.
 ///
 /// @par Test setup
-/// Create one readable and one unreadable file, skip the scenario when the platform cannot enforce restricted
-/// access, and capture Qt log messages.
+/// Create one readable file and one file whose read access is restricted for the current account, then
+/// capture Qt log messages.
 ///
 /// @par Procedure
 /// Execute each workflow over the root, then inspect the outcome, log, problematic-file count, and summary.
@@ -392,10 +392,7 @@ TYPED_TEST(SharedScanWorkflowTest, CheckProblematicFileSkipped_FileUnreadableWhe
     const QString unreadableFilePath = this->getTemporaryDirectoryPath("unreadable-file");
     const ScopedUnreadableFile unreadableFile(unreadableFilePath);
 
-    if (!unreadableFile.isUnreadable())
-    {
-        GTEST_SKIP() << "The current account can still read a file after its access was restricted";
-    }
+    ASSERT_TRUE(unreadableFile.isUnreadable()) << "The test could not restrict read access to the file for the current account";
 
     const ScopedLogCapture logCapture;
     const ScanResult scanResult = TypeParam().execute(QStringList{this->getTemporaryScanRootPath()},
@@ -419,7 +416,7 @@ TYPED_TEST(SharedScanWorkflowTest, CheckProblematicFileSkipped_FileUnreadableWhe
 /// @brief Verifies the outcome when the only discovered file is unreadable.
 ///
 /// @par Test setup
-/// Create one file, make it unreadable, and skip the scenario when the platform cannot enforce restricted access.
+/// Create one file and verify that its read access is restricted for the current account.
 ///
 /// @par Procedure
 /// Execute each workflow over the root and inspect the result and common summary metrics.
@@ -434,10 +431,7 @@ TYPED_TEST(SharedScanWorkflowTest, CheckNoFilesOutcome_OnlyFileUnreadableWhenDis
     const QString unreadableFilePath = this->getTemporaryDirectoryPath("unreadable-file");
     const ScopedUnreadableFile unreadableFile(unreadableFilePath);
 
-    if (!unreadableFile.isUnreadable())
-    {
-        GTEST_SKIP() << "The current account can still read a file after its access was restricted";
-    }
+    ASSERT_TRUE(unreadableFile.isUnreadable()) << "The test could not restrict read access to the file for the current account";
 
     const ScanResult scanResult = TypeParam().execute(QStringList{this->getTemporaryScanRootPath()},
                                                       std::stop_source().get_token(),

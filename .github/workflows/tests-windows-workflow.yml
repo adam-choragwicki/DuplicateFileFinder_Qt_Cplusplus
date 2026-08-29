@@ -1,0 +1,57 @@
+name: Tests (Windows)
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-run-tests:
+    name: Build and test (${{ matrix.config }})
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, Release]
+
+    env:
+      QT_QPA_PLATFORM: offscreen
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        env:
+          # Fix file name too long problem
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: core.longpaths
+          GIT_CONFIG_VALUE_0: "true"
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.9.2"
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Configure CMake
+        run: >
+          cmake -S . -B "build/${{ matrix.config }}"
+          -G "Visual Studio 17 2022" -A x64
+          -DBUILD_TESTING=ON
+          -DQt6_ROOT="${{ env.QT_ROOT_DIR }}"
+
+      - name: Build (${{ matrix.config }})
+        run: cmake --build "build/${{ matrix.config }}" --config "${{ matrix.config }}"
+
+      - name: Run tests (${{ matrix.config }})
+        run: >
+          ctest --test-dir "build/${{ matrix.config }}"
+          --build-config "${{ matrix.config }}"
+          --output-on-failure
+          --no-tests=error

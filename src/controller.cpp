@@ -10,6 +10,8 @@
 #include <QMessageBox>
 #include <QProcess>
 #include <QProgressDialog>
+#include <QDesktopServices> // linux only
+#include <QUrl> // linux only
 
 #include <limits>
 

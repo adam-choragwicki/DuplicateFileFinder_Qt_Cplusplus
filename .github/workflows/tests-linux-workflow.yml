@@ -1,0 +1,61 @@
+name: Tests (Linux)
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-run-tests:
+    name: Build and test (${{ matrix.config }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, Release]
+
+    env:
+      QT_QPA_PLATFORM: offscreen
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.9.2"
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          install-deps: true
+          cache: true
+
+      - name: Verify non-root test account
+        shell: bash
+        run: |
+          if [ "$(id -u)" -eq 0 ]; then
+            echo "Unreadable-file tests require a non-root account." >&2
+            exit 1
+          fi
+
+      - name: Configure CMake
+        run: >
+          cmake -S . -B "build/${{ matrix.config }}"
+          -G Ninja
+          -DBUILD_TESTING=ON
+          -DCMAKE_BUILD_TYPE="${{ matrix.config }}"
+          -DQt6_ROOT="${{ env.QT_ROOT_DIR }}"
+
+      - name: Build (${{ matrix.config }})
+        run: cmake --build "build/${{ matrix.config }}"
+
+      - name: Run tests (${{ matrix.config }})
+        run: >
+          ctest --test-dir "build/${{ matrix.config }}"
+          --output-on-failure
+          --no-tests=error
