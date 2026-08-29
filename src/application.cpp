@@ -12,7 +12,11 @@ Application::Application()
     applyLightTheme();
 
     model_ = std::make_unique<Model>();
-    // model_->addScanDirectory(DevelopmentConfigurationHelper::getInitialDirectoryScanPath()); // TODO remove before release
+
+    for (const QString& initialScanDirectoryPath: DevelopmentConfigurationHelper::getInitialDirectoryScanPaths())
+    {
+        model_->addScanDirectory(initialScanDirectoryPath);
+    }
 
     view_ = std::make_unique<MainWindow>();
 

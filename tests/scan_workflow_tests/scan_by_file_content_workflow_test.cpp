@@ -73,6 +73,43 @@ TEST_F(ScanByFileContentTest, CheckDuplicateGroups_SmokeTest)
     EXPECT_EQ(summary->getTotalAmountOfPotentiallyRecoverableBytes(), expectedRecoverableBytes);
 }
 
+/// @brief Verifies the deterministic multi-root fixture used for screenshots and demonstrations.
+///
+/// @par Test setup
+/// Use the three fictional workspaces below `demo_test`, which contain realistic nested paths, unique files, and
+/// deliberately renamed copies of shared documents.
+///
+/// @par Procedure
+/// Scan all three roots together and inspect the outcome and summary counts.
+///
+/// @par Expected results
+/// The workflow scans 49 files in 73 directories and returns the documented 10 duplicate groups containing
+/// 33 files, without reporting any problematic files.
+TEST_F(ScanByFileContentTest, CheckDuplicateGroups_DemoScenario)
+{
+    const QDir demoScenarioDirectory(QDir(QString::fromUtf8(FILE_SYSTEM_SCENARIOS_DIRECTORY)).filePath("demo_test"));
+    const QStringList demoScanRoots{
+        demoScenarioDirectory.filePath("Creative Studio"),
+        demoScenarioDirectory.filePath("Product Team"),
+        demoScenarioDirectory.filePath("Company Archive")
+    };
+
+    const ScanResult scanResult = FileContentScanWorkflow().execute(demoScanRoots,
+                                                                    std::stop_source().get_token(),
+                                                                    ignoreProgressCallback);
+
+    EXPECT_EQ(scanResult.getOutcome(), ScanOutcome::CompletedWithDuplicates);
+    EXPECT_EQ(scanResult.getDuplicateGroups().size(), 10);
+
+    const auto* summary = std::get_if<FileContentScanSummary>(&scanResult.getScanSummaryDetails());
+    ASSERT_NE(summary, nullptr);
+    EXPECT_EQ(summary->getScannedDirectoriesCount(), 73);
+    EXPECT_EQ(summary->getScannedFilesCount(), 49);
+    EXPECT_EQ(summary->getProblematicFilesCount(), 0);
+    EXPECT_EQ(summary->getDuplicateGroupsCount(), 10);
+    EXPECT_EQ(summary->getTotalFilesInDuplicateGroupsCount(), 33);
+}
+
 /// @brief Verifies the phase types and transition order reported by a successful file-content-based scan.
 ///
 /// @par Test setup

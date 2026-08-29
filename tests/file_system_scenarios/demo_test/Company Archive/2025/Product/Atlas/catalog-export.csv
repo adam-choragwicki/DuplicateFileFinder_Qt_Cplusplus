@@ -1,0 +1,6 @@
+sku,name,category,status,release
+ATLAS-100,Workspace Overview,Core,available,2026-spring
+ATLAS-210,Saved Search Views,Productivity,available,2026-spring
+ATLAS-310,Focused Review Mode,Collaboration,available,2026-spring
+BOREALIS-120,Offline Drafts,Mobile,beta,2026-summer
+BOREALIS-220,Release Checklists,Operations,planned,2026-autumn

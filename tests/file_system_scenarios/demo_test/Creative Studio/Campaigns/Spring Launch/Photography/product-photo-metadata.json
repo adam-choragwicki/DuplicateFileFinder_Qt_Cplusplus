@@ -1,0 +1,9 @@
+{
+  "collection": "aurora-spring-launch",
+  "asset": "dashboard-overview-hero",
+  "dimensions": { "width": 2400, "height": 1600 },
+  "colorProfile": "sRGB",
+  "license": "demo-assets-only",
+  "approved": true,
+  "keywords": ["dashboard", "planning", "spring", "product"]
+}

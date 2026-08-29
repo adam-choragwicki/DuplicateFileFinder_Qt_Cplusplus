@@ -1,0 +1,2 @@
+Fictional workspace used by Duplicate File Finder for deterministic screenshots.
+No directory or document in this tree represents a real person, client, or organization.

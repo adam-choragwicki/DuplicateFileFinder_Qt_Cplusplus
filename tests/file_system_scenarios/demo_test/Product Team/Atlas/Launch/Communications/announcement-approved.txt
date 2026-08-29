@@ -1,0 +1,18 @@
+Aurora Spring Launch
+
+Today we are introducing a simpler way for teams to organize product work without losing sight of the details.
+The spring release brings a clearer project overview, faster search, and a focused review experience designed
+for the moments when a team needs to move from an idea to a dependable plan.
+
+The new overview keeps milestones, decisions, and supporting files together. Search now highlights the most
+useful matches first, while saved filters make recurring reviews easier to repeat. Review mode removes unrelated
+controls and gives comments, approvals, and open questions a consistent home.
+
+These improvements were shaped by small product teams that wanted less ceremony around everyday coordination.
+Existing workspaces receive the update automatically, and every new feature can be adopted gradually. Teams can
+continue using their current projects while trying the updated views whenever they are ready.
+
+Aurora Spring Launch is available today. Visit the product guide for an illustrated tour, migration notes, and
+practical examples covering planning, design review, release preparation, and project handoff.
+
+Build with clarity. Review with confidence. Keep the work moving.

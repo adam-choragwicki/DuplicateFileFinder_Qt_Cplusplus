@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QString>
+#include <QStringList>
 
 /// @brief Provides temporary developer-specific application configuration.
 ///
@@ -10,6 +10,6 @@ class DevelopmentConfigurationHelper final
 public:
     DevelopmentConfigurationHelper() = delete;
 
-    /// @brief Returns the scan directory selected for the current development scenario.
-    [[nodiscard]] static QString getInitialDirectoryScanPath();
+    /// @brief Returns the scan roots selected for the current development scenario.
+    [[nodiscard]] static QStringList getInitialDirectoryScanPaths();
 };

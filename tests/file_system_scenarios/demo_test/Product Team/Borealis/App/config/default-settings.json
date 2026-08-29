@@ -1,0 +1,12 @@
+{
+  "theme": "system",
+  "autosaveSeconds": 30,
+  "offlineDrafts": true,
+  "thumbnailQuality": "balanced",
+  "notifications": {
+    "releaseReady": true,
+    "syncInterrupted": true,
+    "weeklySummary": false
+  },
+  "recentProjectsLimit": 12
+}
