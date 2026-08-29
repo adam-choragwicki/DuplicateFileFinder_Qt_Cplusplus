@@ -1,0 +1,106 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  QT_QPA_PLATFORM: offscreen
+
+jobs:
+  windows-tests:
+    name: Windows (${{ matrix.config }})
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, Release]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        env:
+          # Fix file name too long problem
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: core.longpaths
+          GIT_CONFIG_VALUE_0: "true"
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.9.2"
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Configure CMake
+        run: >
+          cmake -S . -B "build/${{ matrix.config }}"
+          -G "Visual Studio 17 2022" -A x64
+          -DBUILD_TESTING=ON
+          -DQt6_ROOT="${{ env.QT_ROOT_DIR }}"
+
+      - name: Build (${{ matrix.config }})
+        run: cmake --build "build/${{ matrix.config }}" --config "${{ matrix.config }}"
+
+      - name: Run tests (${{ matrix.config }})
+        run: >
+          ctest --test-dir "build/${{ matrix.config }}"
+          --build-config "${{ matrix.config }}"
+          --output-on-failure
+          --no-tests=error
+
+  linux-tests:
+    name: Linux (${{ matrix.config }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, Release]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.9.2"
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          install-deps: true
+          cache: true
+
+      - name: Verify non-root test account
+        shell: bash
+        run: |
+          if [ "$(id -u)" -eq 0 ]; then
+            echo "Unreadable-file tests require a non-root account." >&2
+            exit 1
+          fi
+
+      - name: Configure CMake
+        run: >
+          cmake -S . -B "build/${{ matrix.config }}"
+          -G Ninja
+          -DBUILD_TESTING=ON
+          -DCMAKE_BUILD_TYPE="${{ matrix.config }}"
+          -DQt6_ROOT="${{ env.QT_ROOT_DIR }}"
+
+      - name: Build (${{ matrix.config }})
+        run: cmake --build "build/${{ matrix.config }}"
+
+      - name: Run tests (${{ matrix.config }})
+        run: >
+          ctest --test-dir "build/${{ matrix.config }}"
+          --output-on-failure
+          --no-tests=error
