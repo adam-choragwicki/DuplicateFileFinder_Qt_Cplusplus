@@ -9,7 +9,6 @@ add_library(app_backend
         scanner.cpp scanner.h
         scan_request.h
         scan_progress.h
-        html_result_exporter.cpp html_result_exporter.h
 
         scan_summary/scan_summary.h
         scan_summary/file_name_scan_summary.h

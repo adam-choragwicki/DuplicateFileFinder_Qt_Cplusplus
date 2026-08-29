@@ -1,4 +1,5 @@
 #include "frontend/results_tab.h"
+#include "test_helpers/scoped_default_locale.h"
 
 #include <QApplication>
 #include <QClipboard>
@@ -21,35 +22,6 @@ namespace
 
     /// @brief Zero-based index of the results-table column containing file sizes.
     constexpr int sizesColumn = 2;
-
-    /// @brief Temporarily replaces Qt's default locale and restores it when the current scope ends.
-    ///
-    /// File-size text is intentionally localized by the application. Tests that verify exact strings use this
-    /// guard to make decimal separators and unit formatting deterministic on every development and CI machine.
-    class ScopedDefaultLocale
-    {
-    public:
-        /// @brief Stores the current default locale and installs the requested locale.
-        ///
-        /// @param locale Locale to use until this object is destroyed.
-        explicit ScopedDefaultLocale(const QLocale& locale) : previousDefaultLocale_(QLocale())
-        {
-            QLocale::setDefault(locale);
-        }
-
-        /// @brief Restores the default locale that was active before construction.
-        ~ScopedDefaultLocale()
-        {
-            QLocale::setDefault(previousDefaultLocale_);
-        }
-
-        ScopedDefaultLocale(const ScopedDefaultLocale&) = delete;
-        ScopedDefaultLocale& operator=(const ScopedDefaultLocale&) = delete;
-
-    private:
-        /// @brief Default locale to restore when this guard leaves scope.
-        QLocale previousDefaultLocale_;
-    };
 
     /// @brief Creates a duplicate group from file records supplied in their intended display order.
     ///
@@ -203,7 +175,7 @@ namespace
 /// - Only reference-file rows display their one-based duplicate-group number.
 TEST(ResultsTabTest, PopulateTable_WhenDuplicateGroupsAreShown)
 {
-    const ScopedDefaultLocale defaultLocale{QLocale::c()};
+    const test_helpers::ScopedDefaultLocale defaultLocale{QLocale::c()};
     ResultsTab resultsTab;
 
     const FileRecord twoFileGroupReference{QStringLiteral("first.txt"), QStringLiteral("C:/references/first"), 1536};
@@ -280,7 +252,7 @@ TEST(ResultsTabTest, PopulateTable_WhenDuplicateGroupsAreShown)
 /// - Scaled values retain two decimal places.
 TEST(ResultsTabTest, DisplayAdaptiveFileSizeUnits_WhenFileSizesSpanMultipleUnits)
 {
-    const ScopedDefaultLocale defaultLocale{QLocale::c()};
+    const test_helpers::ScopedDefaultLocale defaultLocale{QLocale::c()};
     ResultsTab resultsTab;
 
     constexpr qint64 kibibyte = 1024;

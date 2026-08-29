@@ -1,5 +1,5 @@
 #include "controller.h"
-#include "backend/html_result_exporter.h"
+#include "html_result_exporter.h"
 #include "backend/scan_request.h"
 
 #include <QCoreApplication>
@@ -41,15 +41,14 @@ Controller::Controller(Model& model, MainWindow& view) : model_(model), view_(vi
 
 void Controller::onExportToHtmlRequested()
 {
-    const std::optional<ScanResult>& latestScanResult = model_.getLatestScanResult();
+    // This is the table model's sorted presentation copy, so its order matches the rows visible to the user.
+    const QList<DuplicateGroup>& duplicateGroups = view_.getDisplayedDuplicateGroups();
 
-    if (!latestScanResult.has_value() || latestScanResult->getDuplicateGroups().isEmpty())
+    if (duplicateGroups.isEmpty())
     {
         QMessageBox::warning(&view_, "Export failed", "There are no scan results to export.");
         return;
     }
-
-    const QList<DuplicateGroup>& duplicateGroups = latestScanResult->getDuplicateGroups();
 
     const QString outputFilePath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("duplicate_file_finder_results.html"));
     QString errorMessage;

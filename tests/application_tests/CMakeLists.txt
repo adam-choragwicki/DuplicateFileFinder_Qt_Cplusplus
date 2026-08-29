@@ -6,6 +6,7 @@ add_executable(application_tests
         temporary_scan_directory_test_fixture.h
 
         ${PROJECT_SOURCE_DIR}/src/controller.cpp ${PROJECT_SOURCE_DIR}/src/controller.h
+        ${PROJECT_SOURCE_DIR}/src/html_result_exporter.cpp ${PROJECT_SOURCE_DIR}/src/html_result_exporter.h
 )
 
 target_link_libraries(application_tests

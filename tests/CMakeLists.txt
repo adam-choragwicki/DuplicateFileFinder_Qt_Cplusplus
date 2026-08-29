@@ -12,6 +12,7 @@ add_library(test_helpers INTERFACE)
 
 target_sources(test_helpers INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}/test_helpers/scan_result_test_helpers.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_helpers/scoped_default_locale.h
 )
 
 target_include_directories(test_helpers INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

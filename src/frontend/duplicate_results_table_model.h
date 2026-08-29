@@ -79,8 +79,6 @@ private:
     static const QColor duplicateRowBackgroundColor_;
     static const QColor duplicateRowTextColor_;
 
-    /// Formats an exact byte count for display using the current locale.
-    [[nodiscard]] static QString formatFileSize(qint64 sizeBytes);
     /// Compares two group-reference files by the requested table column.
     [[nodiscard]] static int compareReferenceFiles(const FileRecord& leftFile,
                                                    const FileRecord& rightFile,

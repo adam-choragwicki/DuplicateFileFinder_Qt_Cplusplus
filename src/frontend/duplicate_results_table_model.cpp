@@ -1,10 +1,10 @@
 #include "duplicate_results_table_model.h"
+#include "file_size_formatter.h"
 
 #include <QBrush>
 #include <QColor>
 #include <QCollator>
 #include <QFont>
-#include <QLocale>
 
 #include <algorithm>
 
@@ -14,20 +14,6 @@ const QColor DuplicateResultsTableModel::duplicateRowBackgroundColor_{0xFF, 0xFF
 const QColor DuplicateResultsTableModel::duplicateRowTextColor_{0x00, 0x00, 0x00};
 
 DuplicateResultsTableModel::DuplicateResultsTableModel(QObject* parent) : QAbstractTableModel(parent) {}
-
-QString DuplicateResultsTableModel::formatFileSize(const qint64 sizeBytes)
-{
-    // Keep byte-sized files explicit and use Qt's locale-aware, traditional base-1024 formatting for larger
-    // values. Formatting belongs here because the underlying FileRecord continues to store the exact count.
-    const QLocale locale;
-
-    if (sizeBytes < 1024)
-    {
-        return QStringLiteral("%1 B").arg(locale.toString(sizeBytes));
-    }
-
-    return locale.formattedDataSize(sizeBytes, 2, QLocale::DataSizeTraditionalFormat);
-}
 
 int DuplicateResultsTableModel::compareReferenceFiles(const FileRecord& leftFile, const FileRecord& rightFile, const int column, const QCollator& collator)
 {
@@ -96,7 +82,7 @@ QVariant DuplicateResultsTableModel::data(const QModelIndex& index, const int ro
                 case DirectoryColumn:
                     return file->getDirectoryPath();
                 case SizeColumn:
-                    return formatFileSize(file->getSizeBytes());
+                    return FileSizeFormatter::format(file->getSizeBytes());
                 default:
                     return {};
             }
