@@ -29,7 +29,6 @@ void Application::applyLightTheme()
 {
     // Ask the platform integration to use light colors for elements outside the widget palette as well, such as native window decorations where supported.
     // This overrides dark theme on Windows
-    // TODO test on Linux
     QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Light);
     QApplication::setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
 }

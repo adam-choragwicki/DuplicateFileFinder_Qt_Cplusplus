@@ -12,8 +12,7 @@ QStringList DevelopmentConfigurationHelper::getInitialDirectoryScanPaths()
         None,
         SmokeTest,
         ResultPresentationTest,
-        DemoTest,
-        BigDirectoryTest // TODO remove before release
+        DemoTest
     };
 
     constexpr DevelopmentScenario testType = DevelopmentScenario::None; // Adjust the development scenario here.
@@ -41,9 +40,6 @@ QStringList DevelopmentConfigurationHelper::getInitialDirectoryScanPaths()
                 demoScenarioDirectory.filePath(QStringLiteral("Company Archive"))
             };
         }
-
-        case DevelopmentScenario::BigDirectoryTest:
-            return {QStringLiteral("C:/FULL_EXTERNAL_DISK")}; // TODO remove before release
     }
 
     throw std::runtime_error("Invalid development test type");

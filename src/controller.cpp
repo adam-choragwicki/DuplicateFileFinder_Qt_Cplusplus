@@ -306,7 +306,7 @@ void Controller::revealFileInSystemFileManager(const QString& absoluteFilePath)
     {
         qWarning() << "Failed to open Windows File Explorer for:" << fileInfo.absoluteFilePath();
     }
-#elif defined(Q_OS_LINUX) // TODO test on Linux
+#elif defined(Q_OS_LINUX)
     if (!QDesktopServices::openUrl(QUrl::fromLocalFile(fileInfo.absolutePath())))
     {
         qWarning() << "Failed to open the containing directory for:" << fileInfo.absoluteFilePath();
