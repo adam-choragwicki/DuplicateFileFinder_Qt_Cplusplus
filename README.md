@@ -2,7 +2,7 @@
 
 A fast, minimalistic, read-only duplicate file finder written in C++20 using Qt 6.9.2 Widgets.
 
-The application recursively scans one or more directory trees and finds duplicated files either by identical contents or by
+The application recursively scans one or more directory trees and finds duplicated files either with identical contents or by
 matching names. It does not delete, move, or modify scanned files; it presents the results so they can be inspected
 and handled deliberately.
 
@@ -78,7 +78,7 @@ file reads rather than from hashing many files in parallel.
 
 ## Result safety
 
-Duplicate File Finder is intentionally read-only. It provides duplicates discovery and navigation tools, but no automatic file
+Duplicate File Finder is intentionally read-only. It provides duplicates discovery and navigation tools but no automatic file
 removal. Unreadable files are skipped, recorded in the log, and reported to the user because the resulting scan may
 be incomplete.
 
@@ -107,7 +107,7 @@ Configure Qt through `CMAKE_PREFIX_PATH` if it is not already discoverable by CM
 cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_PREFIX_PATH="C:/Qt/6.9.2/msvc2022_64"
 ```
 
-The executable is written int the `bin` directory. The exact configuration subdirectory depends on the selected
+The executable is written in the `bin` directory. The exact configuration subdirectory depends on the selected
 CMake generator.
 
 Run all tests with:
