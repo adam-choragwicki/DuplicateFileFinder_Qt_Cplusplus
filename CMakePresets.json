@@ -1,0 +1,44 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "project-base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/cmake-build-${presetName}"
+    },
+    {
+      "name": "project-debug",
+      "hidden": true,
+      "inherits": "project-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "project-release",
+      "hidden": true,
+      "inherits": "project-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "host-windows",
+      "hidden": true,
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "host-linux",
+      "hidden": true,
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    }
+  ]
+}
