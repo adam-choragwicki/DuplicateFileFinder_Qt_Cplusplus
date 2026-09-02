@@ -12,7 +12,7 @@ add_library(app_backend
         file_name_scan_workflow.cpp file_name_scan_workflow.h
         file_content_scan_workflow.cpp file_content_scan_workflow.h
         file_comparator.cpp file_comparator.h
-        file_hasher.h
+        file_hasher.cpp file_hasher.h
         scanner.cpp scanner.h
         scan_request.h
         scan_progress.h
