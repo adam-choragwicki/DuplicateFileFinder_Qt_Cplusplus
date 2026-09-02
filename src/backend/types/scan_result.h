@@ -43,8 +43,6 @@ public:
     [[nodiscard]] const ScanSummaryDetails& getScanSummaryDetails() const { return scanSummaryDetails_; }
     /// Returns the current scan outcome.
     [[nodiscard]] ScanOutcome getOutcome() const { return outcome_; }
-    /// Returns whether the current outcome is ScanOutcome::Cancelled.
-    [[nodiscard]] bool isScanCancelled() const { return outcome_ == ScanOutcome::Cancelled; }
 
     /// Returns the number of inaccessible files reported by the stored concrete summary.
     [[nodiscard]] quint64 getProblematicFilesCount() const

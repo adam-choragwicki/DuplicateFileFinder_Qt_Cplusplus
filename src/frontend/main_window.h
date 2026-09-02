@@ -39,8 +39,6 @@ signals:
     void scanTypeSelectionChanged(ScanType scanType);
     /// Emitted when the user closes the duplicate-results tab.
     void scanResultTabCloseRequested();
-    /// Requests application shutdown.
-    void quitButtonClicked();
 
 public:
     /// Constructs and initializes the complete main-window UI.
