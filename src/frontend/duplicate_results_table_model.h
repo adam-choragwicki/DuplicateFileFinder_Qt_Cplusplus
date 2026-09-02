@@ -23,9 +23,13 @@ public:
     /// Logical columns exposed to the view. `ColumnCount` is a sentinel rather than a visible column.
     enum Column
     {
+        /// File name without its containing directory.
         FileNameColumn,
+        /// Directory containing the file.
         DirectoryColumn,
+        /// Locale-formatted file size.
         SizeColumn,
+        /// Number of visible columns.
         ColumnCount
     };
 
@@ -36,6 +40,8 @@ public:
         AbsoluteFilePathRole = Qt::UserRole
     };
 
+    /// Creates an empty presentation model using the default file-name sort.
+    /// @param[in] parent Optional QObject owner.
     explicit DuplicateResultsTableModel(QObject* parent = nullptr);
 
     /// Returns the number of flattened file rows. Valid parents have no children because this is a table.
@@ -68,15 +74,19 @@ private:
     /// Entries contain indices rather than pointers so rebuilding the list after a group sort is safe.
     struct RowEntry
     {
+        /// Index into duplicateGroups_.
         qsizetype groupIndex;
+        /// Index into the selected group's file list.
         qsizetype fileIndex;
     };
 
-    // Reference rows introduce a duplicate group; contrasting colors make group boundaries visible without
-    // inserting non-file separator rows into the table model.
+    /// Reference rows introduce a duplicate group; contrasting colors expose group boundaries without separator rows.
     static const QColor referenceRowBackgroundColor_;
+    /// Text color used for reference-file rows.
     static const QColor referenceRowTextColor_;
+    /// Background color used for additional-copy rows.
     static const QColor duplicateRowBackgroundColor_;
+    /// Text color used for additional-copy rows.
     static const QColor duplicateRowTextColor_;
 
     /// Compares two group-reference files by the requested table column.

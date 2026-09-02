@@ -7,6 +7,8 @@ CMakeUserPresets.json
 cmake-build-*
 executable*
 target*
+# JetBrains run configuration
+.run
 
 *~
 *.autosave

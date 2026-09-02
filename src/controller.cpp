@@ -1,10 +1,9 @@
 #include "controller.h"
-#include "html_result_exporter.h"
+#include "reporting/html_result_exporter.h"
 #include "backend/scan_request.h"
 
 #include <QCoreApplication>
 #include <QDir>
-#include <QEventLoop>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMessageBox>
@@ -13,24 +12,25 @@
 #include <QDesktopServices> // linux only
 #include <QUrl> // linux only
 
-#include <limits>
-
 Controller::Controller(Model& model, MainWindow& view) : model_(model), view_(view), scanner_(this)
 {
     qInfo() << "Initializing controller";
 
+    // Handle user-initiated events from the view.
     connect(&view_, &MainWindow::startScanButtonClicked, this, &Controller::onStartScanButtonClicked);
     connect(&view_, &MainWindow::addDirectoryButtonClicked, this, &Controller::onAddDirectoryButtonClicked);
     connect(&view_, &MainWindow::removeDirectoryButtonClicked, this, &Controller::onRemoveDirectoryButtonClicked);
     connect(&view_, &MainWindow::scanTypeSelectionChanged, &model_, &Model::setScanType);
-    connect(&view_, &MainWindow::scanResultCloseRequested, &model_, &Model::clearScanResult);
+    connect(&view_, &MainWindow::scanResultTabCloseRequested, &model_, &Model::clearScanResult);
     connect(&view_, &MainWindow::exportToHtmlRequested, this, &Controller::onExportToHtmlRequested);
     connect(&view_, &MainWindow::revealFileInSystemFileManagerRequested, this, &Controller::revealFileInSystemFileManager);
 
+    // Synchronize the view with model changes.
     connect(&model_, &Model::scanDirectoryPathsChanged, &view_, &MainWindow::setScanDirectoryPaths);
     connect(&model_, &Model::scanTypeChanged, &view_, &MainWindow::setScanTypeInComboBox);
     connect(&model_, &Model::scanResultChanged, this, &Controller::onScanResultChanged);
 
+    // Handle scanner progress and lifecycle events.
     connect(&scanner_, &Scanner::progressChanged, this, &Controller::onScanProgressChanged);
     connect(&scanner_, &Scanner::scanComplete, this, &Controller::onScanOperationComplete);
     connect(&scanner_, &Scanner::scanCancelled, this, &Controller::onScanOperationCancelled);
@@ -59,20 +59,18 @@ void Controller::onExportToHtmlRequested()
     {
         qCritical() << "Failed to export scan results to" << outputFilePath << ':' << errorMessage;
 
-        QMessageBox::critical(
-            &view_,
-            "Export failed",
-            QStringLiteral("The HTML report could not be saved.\n\n%1").arg(errorMessage));
+        QMessageBox::critical(&view_,
+                              "Export failed",
+                              QStringLiteral("The HTML report could not be saved.\n\n%1").arg(errorMessage));
 
         return;
     }
 
     qInfo() << "Exported scan results to" << outputFilePath;
 
-    QMessageBox::information(
-        &view_,
-        "Export complete",
-        QStringLiteral("The HTML report was saved to:\n\n%1").arg(QDir::toNativeSeparators(outputFilePath)));
+    QMessageBox::information(&view_,
+                             "Export complete",
+                             QStringLiteral("The HTML report was saved to:\n\n%1").arg(QDir::toNativeSeparators(outputFilePath)));
 }
 
 void Controller::onStartScanButtonClicked()
@@ -88,10 +86,9 @@ void Controller::onStartScanButtonClicked()
             return;
 
         case Model::ScanStartOutcome::NoDirectoriesSelected:
-            QMessageBox::information(
-                &view_,
-                "Nothing to scan",
-                "Nothing to scan. No directories selected.");
+            QMessageBox::information(&view_,
+                                     "Nothing to scan",
+                                     "Nothing to scan. No directories selected.");
     }
 }
 
@@ -110,11 +107,7 @@ void Controller::showScanProgressDialog()
 
     connect(scanProgressDialog_, &QProgressDialog::canceled, &scanner_, &Scanner::cancelScan);
 
-    // QProgressDialog normally waits for control to return to the event loop before painting.
-    // Show and paint the initial state first so thread-pool startup or other scan preparation can
-    // never leave the user looking at an unchanged main window after clicking Start scan.
     scanProgressDialog_->show();
-    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
 }
 
 void Controller::onAddDirectoryButtonClicked()
@@ -130,7 +123,7 @@ void Controller::onAddDirectoryButtonClicked()
 
     const Model::AddScanDirectoryResult addScanDirectoryResult = model_.addScanDirectory(directoryPath);
 
-    switch (addScanDirectoryResult.outcome)
+    switch (addScanDirectoryResult.getAddScanDirectoryOutcome())
     {
         case Model::AddScanDirectoryOutcome::Added:
         case Model::AddScanDirectoryOutcome::InvalidPath:
@@ -140,9 +133,8 @@ void Controller::onAddDirectoryButtonClicked()
             QMessageBox::information(&view_,
                                      "Directory already included",
                                      QStringLiteral("Directory \"%1\" is already in the list because it is covered by \"%2\".")
-                                     .arg(
-                                         QDir::toNativeSeparators(addScanDirectoryResult.normalizedDirectoryPath),
-                                         QDir::toNativeSeparators(addScanDirectoryResult.coveringDirectoryPath)));
+                                     .arg(QDir::toNativeSeparators(addScanDirectoryResult.getNormalizedDirectoryPath()),
+                                          QDir::toNativeSeparators(addScanDirectoryResult.getCoveringDirectoryPath())));
     }
 }
 
@@ -153,48 +145,40 @@ void Controller::onRemoveDirectoryButtonClicked()
     model_.removeScanDirectory(view_.getSelectedScanDirectoryPath());
 }
 
-void Controller::onScanProgressChanged(const ScanProgress& progress)
+void Controller::onScanProgressChanged(const ScanProgress& scanProgress)
 {
-    model_.updateScanProgress(progress);
-
     if (!scanProgressDialog_)
     {
         return;
     }
 
-    QString progressText = scanPhaseDescription(progress.scanPhase);
+    QString progressText = scanPhaseDescription(scanProgress.scanPhase);
 
-    if (!progress.totalFilesCount.has_value())
+    if (!scanProgress.totalFilesCount.has_value())
     {
-        // A directory must be enumerated before its total number of files is known. Keep the
-        // progress bar indeterminate during that single pass, but still expose the live count.
+        // A directory must be enumerated before its total number of files is known. Keep the progress bar indeterminate during that single pass, but still expose the live count.
         scanProgressDialog_->setRange(0, 0);
-        progressText += QStringLiteral("\nProcessed %1/? files").arg(progress.processedFilesCount);
+        progressText += QStringLiteral("\nProcessed %1/? files").arg(scanProgress.processedFilesCount);
     }
     else
     {
-        const quint64 totalFiles = *progress.totalFilesCount;
-        const quint64 processedFiles = qMin(progress.processedFilesCount, totalFiles);
+        const quint64 totalFiles = *scanProgress.totalFilesCount;
+        const quint64 processedFiles = qMin(scanProgress.processedFilesCount, totalFiles);
         progressText += QStringLiteral("\nProcessed %1/%2 files").arg(processedFiles).arg(totalFiles);
 
-        if (totalFiles == 0)
-        {
-            scanProgressDialog_->setRange(0, 1);
-            scanProgressDialog_->setValue(1);
-        }
-        else if (totalFiles <= static_cast<quint64>(std::numeric_limits<int>::max()))
-        {
-            scanProgressDialog_->setRange(0, static_cast<int>(totalFiles));
-            scanProgressDialog_->setValue(static_cast<int>(processedFiles));
-        }
-        else
-        {
-            // QProgressDialog uses int ranges. Scale exceptionally large file counts while keeping the exact 64-bit values in the text shown to the user.
-            constexpr int scaledMaximum = 1'000'000;
-            const auto scaledValue = static_cast<int>(static_cast<long double>(processedFiles) / static_cast<long double>(totalFiles) * scaledMaximum);
-            scanProgressDialog_->setRange(0, scaledMaximum);
-            scanProgressDialog_->setValue(scaledValue);
-        }
+        // QProgressDialog accepts only int values, while scan counters are 64-bit. Use a fixed graphical scale and keep the exact counts in the label above.
+        constexpr int progressBarMaximum = 1'000;
+
+        // A known total of zero means that this phase has no work and is therefore complete.
+        // It must not use range 0..0 because Qt reserves that range for an indeterminate bar.
+        const int progressBarValue = totalFiles == 0
+                                         ? progressBarMaximum
+                                         : static_cast<int>(static_cast<long double>(processedFiles)
+                                                            / static_cast<long double>(totalFiles)
+                                                            * progressBarMaximum);
+
+        scanProgressDialog_->setRange(0, progressBarMaximum);
+        scanProgressDialog_->setValue(progressBarValue);
     }
 
     scanProgressDialog_->setLabelText(progressText);
@@ -229,28 +213,25 @@ void Controller::onScanOperationComplete(const ScanResult& scanResult)
         case ScanOutcome::CompletedWithoutDuplicates:
             if (!completedWithProblems)
             {
-                QMessageBox::information(
-                    &view_,
-                    "Scan complete",
-                    "The scan completed successfully. No duplicate files were found.");
+                QMessageBox::information(&view_,
+                                         "Scan complete",
+                                         "The scan completed successfully. No duplicate files were found.");
             }
             break;
 
         case ScanOutcome::NoFilesFound:
             if (!completedWithProblems)
             {
-                QMessageBox::information(
-                    &view_,
-                    "No files found",
-                    "The selected directory and its subdirectories contain no files.");
+                QMessageBox::information(&view_,
+                                         "No files found",
+                                         "The selected directory and its subdirectories contain no files.");
             }
             break;
 
         case ScanOutcome::Failed:
-            QMessageBox::critical(
-                &view_,
-                "Scan failed",
-                "The scan could not be completed. Check the application log for details.");
+            QMessageBox::critical(&view_,
+                                  "Scan failed",
+                                  "The scan could not be completed. Check the application log for details.");
             break;
 
         case ScanOutcome::Cancelled:

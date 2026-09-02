@@ -21,7 +21,10 @@ public:
         AbsolutePathRole = Qt::UserRole
     };
 
+    /// Creates an empty directory-tree presentation model and caches the platform directory icon.
+    /// @param[in] parent Optional QObject owner.
     explicit ScanDirectoriesTreeModel(QObject* parent = nullptr);
+    /// Destroys every owned root and recursively loaded descendant node.
     ~ScanDirectoriesTreeModel() override;
 
     /// Creates an index for a root or a previously loaded child directory.

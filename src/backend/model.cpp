@@ -1,35 +1,16 @@
 #include "model.h"
-
-#include <QDir>
+#include "path_comparison_policy.h"
+#include "path_utils.h"
 
 #include <utility>
 
+Model::AddScanDirectoryResult::AddScanDirectoryResult(const AddScanDirectoryOutcome addScanDirectoryOutcome, QString normalizedDirectoryPath, QString coveringDirectoryPath)
+    : addScanDirectoryOutcome_(addScanDirectoryOutcome),
+      normalizedDirectoryPath_(std::move(normalizedDirectoryPath)),
+      coveringDirectoryPath_(std::move(coveringDirectoryPath))
+{}
+
 Model::Model(QObject* parent) : QObject(parent) {}
-
-const QStringList& Model::getScanDirectoryPaths() const
-{
-    return scanDirectoryPaths_;
-}
-
-ScanType Model::getScanType() const
-{
-    return scanType_;
-}
-
-Model::ScanState Model::getScanState() const
-{
-    return scanState_;
-}
-
-const std::optional<ScanProgress>& Model::getScanProgress() const
-{
-    return scanProgress_;
-}
-
-const std::optional<ScanResult>& Model::getLatestScanResult() const
-{
-    return latestScanResult_;
-}
 
 bool Model::hasDuplicateResults() const
 {
@@ -42,36 +23,31 @@ Model::AddScanDirectoryResult Model::addScanDirectory(const QString& directoryPa
 {
     if (directoryPath.trimmed().isEmpty())
     {
-        return {.outcome = AddScanDirectoryOutcome::InvalidPath, .normalizedDirectoryPath = {}, .coveringDirectoryPath = {}};
+        return AddScanDirectoryResult(AddScanDirectoryOutcome::InvalidPath, {}, {});
     }
 
-    const QString normalizedDirectoryPath = normalizeDirectoryPath(directoryPath);
+    const QString normalizedDirectoryPath = PathUtils::normalizeDirectoryPath(directoryPath);
 
     for (const QString& existingDirectoryPath: scanDirectoryPaths_)
     {
-        if (isSameDirectoryOrSubdirectoryOf(normalizedDirectoryPath, existingDirectoryPath))
+        if (PathUtils::isSameDirectoryOrSubdirectoryOf(normalizedDirectoryPath, existingDirectoryPath))
         {
-            return {.outcome = AddScanDirectoryOutcome::AlreadyIncluded,
-                    .normalizedDirectoryPath = normalizedDirectoryPath,
-                    .coveringDirectoryPath = existingDirectoryPath};
+            return AddScanDirectoryResult(AddScanDirectoryOutcome::AlreadyIncluded,
+                                          normalizedDirectoryPath,
+                                          existingDirectoryPath);
         }
     }
 
-    QStringList updatedDirectoryPaths;
-
-    for (const QString& existingDirectoryPath: scanDirectoryPaths_)
+    // Replace any narrower roots with the broader root being added. For example, adding /data makes an existing /data/photos root redundant because scanning /data already includes that directory.
+    scanDirectoryPaths_.removeIf([&normalizedDirectoryPath](const QString& existingDirectoryPath)
     {
-        if (!isSameDirectoryOrSubdirectoryOf(existingDirectoryPath, normalizedDirectoryPath))
-        {
-            updatedDirectoryPaths.append(existingDirectoryPath);
-        }
-    }
+        return PathUtils::isSameDirectoryOrSubdirectoryOf(existingDirectoryPath, normalizedDirectoryPath);
+    });
 
-    updatedDirectoryPaths.append(normalizedDirectoryPath);
-    scanDirectoryPaths_ = std::move(updatedDirectoryPaths);
+    scanDirectoryPaths_.append(normalizedDirectoryPath);
 
     emit scanDirectoryPathsChanged(scanDirectoryPaths_);
-    return {AddScanDirectoryOutcome::Added, normalizedDirectoryPath, {}};
+    return AddScanDirectoryResult(AddScanDirectoryOutcome::Added, normalizedDirectoryPath, {});
 }
 
 bool Model::removeScanDirectory(const QString& directoryPath)
@@ -81,20 +57,20 @@ bool Model::removeScanDirectory(const QString& directoryPath)
         return false;
     }
 
-    const QString normalizedDirectoryPath = normalizeDirectoryPath(directoryPath);
+    const QString normalizedDirectoryPath = PathUtils::normalizeDirectoryPath(directoryPath);
 
-    for (qsizetype directoryIndex = 0; directoryIndex < scanDirectoryPaths_.size(); ++directoryIndex)
+    const qsizetype directoryIndex = scanDirectoryPaths_.indexOf(normalizedDirectoryPath,
+                                                                 0,
+                                                                 PathComparisonPolicy::caseSensitivity);
+
+    if (directoryIndex < 0)
     {
-        if (isSameDirectoryOrSubdirectoryOf(normalizedDirectoryPath, scanDirectoryPaths_.at(directoryIndex))
-            && isSameDirectoryOrSubdirectoryOf(scanDirectoryPaths_.at(directoryIndex), normalizedDirectoryPath))
-        {
-            scanDirectoryPaths_.removeAt(directoryIndex);
-            emit scanDirectoryPathsChanged(scanDirectoryPaths_);
-            return true;
-        }
+        return false;
     }
 
-    return false;
+    scanDirectoryPaths_.removeAt(directoryIndex);
+    emit scanDirectoryPathsChanged(scanDirectoryPaths_);
+    return true;
 }
 
 void Model::setScanType(const ScanType scanType)
@@ -122,39 +98,21 @@ Model::ScanStartOutcome Model::beginScan()
         return ScanStartOutcome::NoDirectoriesSelected;
     }
 
-    scanProgress_.reset();
     scanState_ = ScanState::Scanning;
-    emit scanStateChanged(scanState_);
     return ScanStartOutcome::Started;
-}
-
-void Model::updateScanProgress(const ScanProgress& progress)
-{
-    if (scanState_ != ScanState::Scanning)
-    {
-        return;
-    }
-
-    scanProgress_ = progress;
-    emit scanProgressChanged(progress);
 }
 
 void Model::completeScan(const ScanResult& scanResult)
 {
-    scanProgress_.reset();
     scanState_ = ScanState::Idle;
     latestScanResult_ = scanResult;
 
-    emit scanStateChanged(scanState_);
     emit scanResultChanged();
 }
 
 void Model::markScanCancelled()
 {
-    scanProgress_.reset();
     scanState_ = ScanState::Idle;
-
-    emit scanStateChanged(scanState_);
 }
 
 void Model::clearScanResult()
@@ -166,36 +124,4 @@ void Model::clearScanResult()
 
     latestScanResult_.reset();
     emit scanResultChanged();
-}
-
-QString Model::normalizeDirectoryPath(const QString& directoryPath)
-{
-    return QDir::cleanPath(QDir::fromNativeSeparators(QDir(directoryPath).absolutePath()));
-}
-
-bool Model::isSameDirectoryOrSubdirectoryOf(const QString& directoryPath,
-                                            const QString& possibleParentDirectoryPath)
-{
-    const QString normalizedDirectoryPath = normalizeDirectoryPath(directoryPath);
-    const QString normalizedParentDirectoryPath = normalizeDirectoryPath(possibleParentDirectoryPath);
-
-#if defined(Q_OS_WIN)
-    constexpr Qt::CaseSensitivity pathCaseSensitivity = Qt::CaseInsensitive;
-#else
-    constexpr Qt::CaseSensitivity pathCaseSensitivity = Qt::CaseSensitive;
-#endif
-
-    if (normalizedDirectoryPath.compare(normalizedParentDirectoryPath, pathCaseSensitivity) == 0)
-    {
-        return true;
-    }
-
-    QString parentDirectoryPathPrefix = normalizedParentDirectoryPath;
-
-    if (!parentDirectoryPathPrefix.endsWith('/'))
-    {
-        parentDirectoryPathPrefix.append('/');
-    }
-
-    return normalizedDirectoryPath.startsWith(parentDirectoryPathPrefix, pathCaseSensitivity);
 }

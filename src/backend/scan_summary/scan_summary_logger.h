@@ -3,18 +3,26 @@
 #include "file_content_scan_summary.h"
 #include "file_name_scan_summary.h"
 #include "types/scan_result.h"
-#include "scan_summary.h"
+#include "abstract_scan_summary.h"
 
+/// @brief Writes workflow-specific scan summaries through Qt's logging system.
 class ScanSummaryLogger final
 {
 public:
+    /// Visits the result's concrete summary and logs its common and workflow-specific fields.
+    /// @param[in] scanResult Result whose summary should be logged.
     static void log(const ScanResult& scanResult);
 
 private:
+    /// Formats a byte count using binary thresholds and a compact unit suffix.
     [[nodiscard]] static QString formatByteCount(quint64 bytes);
+    /// Formats a non-negative duration using milliseconds, seconds, minutes, or hours.
     [[nodiscard]] static QString formatDuration(std::chrono::milliseconds duration);
-    static void logCommonFields(const ScanSummary& summary);
+    /// Logs the fields shared by both concrete summary types.
+    static void logCommonFields(const AbstractScanSummary& summary);
+    /// Logs the heading and common fields for a file-name summary.
     static void logFileNameSummary(const FileNameScanSummary& summary);
+    /// Logs common fields and potentially recoverable bytes for a file-content summary.
     static void logFileContentSummary(const FileContentScanSummary& summary);
 };
 
@@ -97,39 +105,41 @@ inline QString ScanSummaryLogger::formatDuration(const std::chrono::milliseconds
     {
         const qint64 minutes = totalSeconds / secondsPerMinute;
         const qint64 seconds = totalSeconds % secondsPerMinute;
-        return QStringLiteral("%1 and %2").arg(
-            formatUnit(minutes, QStringLiteral("minute"), QStringLiteral("minutes")),
-            formatUnit(seconds, QStringLiteral("second"), QStringLiteral("seconds")));
+        return QStringLiteral("%1 and %2").arg(formatUnit(minutes, QStringLiteral("minute"), QStringLiteral("minutes")),
+                                               formatUnit(seconds, QStringLiteral("second"), QStringLiteral("seconds")));
     }
 
     const qint64 totalMinutes = totalSeconds / secondsPerMinute;
     const qint64 hours = totalMinutes / minutesPerHour;
     const qint64 minutes = totalMinutes % minutesPerHour;
-    return QStringLiteral("%1 and %2").arg(
-        formatUnit(hours, QStringLiteral("hour"), QStringLiteral("hours")),
-        formatUnit(minutes, QStringLiteral("minute"), QStringLiteral("minutes")));
+    return QStringLiteral("%1 and %2").arg(formatUnit(hours, QStringLiteral("hour"), QStringLiteral("hours")),
+                                           formatUnit(minutes, QStringLiteral("minute"), QStringLiteral("minutes")));
 }
 
 inline void ScanSummaryLogger::log(const ScanResult& scanResult)
 {
-    std::visit(
-        [](const auto& summary)
-        {
-            using SummaryType = std::decay_t<decltype(summary)>;
+    // ScanSummaryDetails is a std::variant containing exactly one concrete summary type. std::visit invokes this
+    // generic visitor with the active alternative and instantiates it for every alternative supported by the variant.
+    std::visit([]<typename T>(const T& summary)
+               {
+                   // Remove any reference and cv-qualifiers before identifying the concrete summary type.
+                   using SummaryType = std::decay_t<T>;
 
-            if constexpr (std::is_same_v<SummaryType, FileNameScanSummary>)
-            {
-                logFileNameSummary(summary);
-            }
-            else
-            {
-                logFileContentSummary(summary);
-            }
-        },
-        scanResult.getScanSummaryDetails());
+                   // if constexpr discards the non-matching branch at compile time, so each visitor instantiation
+                   // calls only the logger accepting its concrete summary type.
+                   if constexpr (std::is_same_v<SummaryType, FileNameScanSummary>)
+                   {
+                       logFileNameSummary(summary);
+                   }
+                   else
+                   {
+                       logFileContentSummary(summary);
+                   }
+               },
+               scanResult.getScanSummaryDetails());
 }
 
-inline void ScanSummaryLogger::logCommonFields(const ScanSummary& summary)
+inline void ScanSummaryLogger::logCommonFields(const AbstractScanSummary& summary)
 {
     qInfo().noquote() << "  Completed at:" << summary.getCompletedAt().toLocalTime().toString("yyyy-MM-dd hh:mm:ss");
     qInfo().noquote() << "  Duration:" << formatDuration(summary.getDuration());

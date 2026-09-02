@@ -1,7 +1,14 @@
 add_library(app_backend
         model.cpp model.h
-        file_collector.cpp file_collector.h
-        scan_workflow.h
+        path_comparison_policy.h
+        path_utils.cpp path_utils.h
+
+        file_tree_enumeration/file_tree_enumerator.cpp file_tree_enumeration/file_tree_enumerator.h
+        file_tree_enumeration/file_tree_enumeration_metrics.h
+        file_tree_enumeration/file_tree_enumeration_result.h
+        file_tree_enumeration/file_tree_enumeration_status.h
+
+        abstract_scan_workflow.h
         file_name_scan_workflow.cpp file_name_scan_workflow.h
         file_content_scan_workflow.cpp file_content_scan_workflow.h
         file_comparator.cpp file_comparator.h
@@ -10,7 +17,7 @@ add_library(app_backend
         scan_request.h
         scan_progress.h
 
-        scan_summary/scan_summary.h
+        scan_summary/abstract_scan_summary.h
         scan_summary/file_name_scan_summary.h
         scan_summary/file_content_scan_summary.h
         scan_summary/scan_summary_logger.h

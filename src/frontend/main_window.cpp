@@ -281,5 +281,5 @@ void MainWindow::initializeResultsTabCloseButton()
     const int resultsTabIndex = ui->main_TabWidget->indexOf(ui->resultsTab);
     ui->main_TabWidget->tabBar()->setTabButton(resultsTabIndex, QTabBar::RightSide, closeButton);
 
-    connect(closeButton, &QToolButton::clicked, this, &MainWindow::scanResultCloseRequested);
+    connect(closeButton, &QToolButton::clicked, this, &MainWindow::scanResultTabCloseRequested);
 }

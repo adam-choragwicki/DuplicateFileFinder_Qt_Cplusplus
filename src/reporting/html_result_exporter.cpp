@@ -1,8 +1,8 @@
 #include "html_result_exporter.h"
-#include "file_size_formatter.h"
+#include "frontend/file_size_formatter.h"
 
-#include <QSaveFile>
 #include <QTextStream>
+#include <QSaveFile>
 
 bool HtmlResultExporter::exportToFile(const QList<DuplicateGroup>& duplicateGroups, const QString& outputFilePath, QString& errorMessage)
 {

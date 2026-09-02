@@ -116,7 +116,7 @@ TEST(MainWindowTest, RequestResultClearing_WhenResultsTabCloseButtonIsClicked)
     ASSERT_NE(closeButton, nullptr);
     ASSERT_NE(exportAction, nullptr);
     int closeRequestCount = 0;
-    QObject::connect(&mainWindow, &MainWindow::scanResultCloseRequested, &mainWindow,
+    QObject::connect(&mainWindow, &MainWindow::scanResultTabCloseRequested, &mainWindow,
                      [&closeRequestCount] { ++closeRequestCount; });
     EXPECT_FALSE(closeButton->icon().isNull()); // close button has an icon
 

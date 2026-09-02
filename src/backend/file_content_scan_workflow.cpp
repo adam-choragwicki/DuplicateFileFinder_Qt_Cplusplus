@@ -1,6 +1,7 @@
 #include "file_content_scan_workflow.h"
 #include "file_comparator.h"
 #include "file_hasher.h"
+#include "file_tree_enumeration/file_tree_enumerator.h"
 #include "scan_summary/file_content_scan_summary.h"
 
 #include <QDateTime>
@@ -11,9 +12,9 @@
 #include <utility>
 
 FileContentScanWorkflow::FileContentScanWorkflow()
-    : FileContentScanWorkflow(HashingConfiguration{&FileHasher::calculateFullFileHash,
-                                                   &FileHasher::calculateFileSampleHash,
-                                                   defaultFileSamplingThresholdBytes_})
+    : FileContentScanWorkflow(HashingConfiguration{.fileHashCalculator_ = &FileHasher::calculateFullFileHash,
+                                                   .fileSampleHashCalculator_ = &FileHasher::calculateFileSampleHash,
+                                                   .fileSamplingThresholdBytes_ = defaultFileSamplingThresholdBytes_})
 {}
 
 FileContentScanWorkflow::FileContentScanWorkflow(HashingConfiguration hashingConfiguration)
@@ -37,26 +38,26 @@ ScanResult FileContentScanWorkflow::execute(const QStringList& rootDirectoryPath
 
     const FileCollectionStageResult collectedFiles = collectFilesGroupedBySize(rootDirectoryPaths, stopToken, scanProgressCallback);
 
-    const FileCollectionMetrics& fileCollectionMetrics = collectedFiles.collectionResult_.getMetrics();
+    const FileTreeEnumerationMetrics& fileTreeEnumerationMetrics = collectedFiles.fileTreeEnumerationResult_.getMetrics();
 
-    if (collectedFiles.collectionResult_.getStatus() == FileCollectionStatus::InvalidRootDirectory)
+    if (collectedFiles.fileTreeEnumerationResult_.getStatus() == FileTreeEnumerationStatus::InvalidRootDirectory)
     {
-        return createFinalScanResult({}, ScanOutcome::Failed, fileCollectionMetrics, durationTimer.elapsed());
+        return createFinalScanResult({}, ScanOutcome::Failed, fileTreeEnumerationMetrics, durationTimer.elapsed());
     }
 
-    if (collectedFiles.collectionResult_.getStatus() == FileCollectionStatus::Cancelled || stopToken.stop_requested())
+    if (collectedFiles.fileTreeEnumerationResult_.getStatus() == FileTreeEnumerationStatus::Cancelled || stopToken.stop_requested())
     {
-        return createFinalScanResult({}, ScanOutcome::Cancelled, fileCollectionMetrics, durationTimer.elapsed());
+        return createFinalScanResult({}, ScanOutcome::Cancelled, fileTreeEnumerationMetrics, durationTimer.elapsed());
     }
 
     const EqualSizeCandidateStageResult equalSizeCandidates = identifyEqualSizeCandidates(collectedFiles.filesGroupedBySize_,
-                                                                                          fileCollectionMetrics.getScannedFilesCount(),
+                                                                                          fileTreeEnumerationMetrics.getScannedFilesCount(),
                                                                                           stopToken,
                                                                                           scanProgressCallback);
 
     if (equalSizeCandidates.status_ == ContentScanStageStatus::Cancelled)
     {
-        return createFinalScanResult({}, ScanOutcome::Cancelled, fileCollectionMetrics, durationTimer.elapsed());
+        return createFinalScanResult({}, ScanOutcome::Cancelled, fileTreeEnumerationMetrics, durationTimer.elapsed());
     }
 
     const MatchingHashCandidateStageResult matchingHashCandidates = hashEqualSizeCandidates(collectedFiles.filesGroupedBySize_,
@@ -70,7 +71,7 @@ ScanResult FileContentScanWorkflow::execute(const QStringList& rootDirectoryPath
                                         ? ScanOutcome::Cancelled
                                         : ScanOutcome::Failed;
 
-        return createFinalScanResult({}, outcome, fileCollectionMetrics, durationTimer.elapsed());
+        return createFinalScanResult({}, outcome, fileTreeEnumerationMetrics, durationTimer.elapsed());
     }
 
     ContentVerificationStageResult verifiedDuplicates = verifyMatchingHashCandidates(matchingHashCandidates.candidateGroups_,
@@ -86,21 +87,21 @@ ScanResult FileContentScanWorkflow::execute(const QStringList& rootDirectoryPath
 
         return createFinalScanResult(verifiedDuplicates.duplicateGroups_,
                                      outcome,
-                                     fileCollectionMetrics,
+                                     fileTreeEnumerationMetrics,
                                      durationTimer.elapsed());
     }
 
-    const ScanOutcome outcome = classifySuccessfulScan(fileCollectionMetrics, verifiedDuplicates.duplicateGroups_);
+    const ScanOutcome outcome = classifySuccessfulScan(fileTreeEnumerationMetrics, verifiedDuplicates.duplicateGroups_);
 
     scanProgressCallback({
         .scanPhase = FileContentScanPhase::BuildingScanResult,
-        .processedFilesCount = fileCollectionMetrics.getScannedFilesCount(),
-        .totalFilesCount = fileCollectionMetrics.getScannedFilesCount()
+        .processedFilesCount = fileTreeEnumerationMetrics.getScannedFilesCount(),
+        .totalFilesCount = fileTreeEnumerationMetrics.getScannedFilesCount()
     });
 
     return createFinalScanResult(verifiedDuplicates.duplicateGroups_,
                                  outcome,
-                                 fileCollectionMetrics,
+                                 fileTreeEnumerationMetrics,
                                  durationTimer.elapsed());
 }
 
@@ -117,22 +118,22 @@ FileContentScanWorkflow::FileCollectionStageResult FileContentScanWorkflow::coll
         .totalFilesCount = std::nullopt
     });
 
-    const FileCollectionResult collectionResult = FileCollector::collectRecursively(rootDirectoryPaths,
-                                                                                    stopToken,
-                                                                                    [&filesGroupedBySize, &enumeratedFilesCount, &scanProgressCallback](FileRecord file)
-                                                                                    {
-                                                                                        // visitor collecting files and grouping them by size
-                                                                                        filesGroupedBySize[file.getSizeBytes()].append(std::move(file));
-                                                                                        ++enumeratedFilesCount;
+    const FileTreeEnumerationResult enumerationResult = FileTreeEnumerator::enumerateRecursively(rootDirectoryPaths,
+                                                                                                 stopToken,
+                                                                                                 [&filesGroupedBySize, &enumeratedFilesCount, &scanProgressCallback](FileRecord file)
+                                                                                                 {
+                                                                                                     // visitor collecting files and grouping them by size
+                                                                                                     filesGroupedBySize[file.getSizeBytes()].append(std::move(file));
+                                                                                                     ++enumeratedFilesCount;
 
-                                                                                        scanProgressCallback({
-                                                                                            .scanPhase = FileContentScanPhase::EnumeratingFiles,
-                                                                                            .processedFilesCount = enumeratedFilesCount,
-                                                                                            .totalFilesCount = std::nullopt
-                                                                                        });
-                                                                                    });
+                                                                                                     scanProgressCallback({
+                                                                                                         .scanPhase = FileContentScanPhase::EnumeratingFiles,
+                                                                                                         .processedFilesCount = enumeratedFilesCount,
+                                                                                                         .totalFilesCount = std::nullopt
+                                                                                                     });
+                                                                                                 });
 
-    return {collectionResult, std::move(filesGroupedBySize)};
+    return {.fileTreeEnumerationResult_ = enumerationResult, .filesGroupedBySize_ = std::move(filesGroupedBySize)};
 }
 
 FileContentScanWorkflow::EqualSizeCandidateStageResult FileContentScanWorkflow::identifyEqualSizeCandidates(const FilesGroupedBySize& filesGroupedBySize,
@@ -516,7 +517,7 @@ quint64 FileContentScanWorkflow::calculatePotentiallyRecoverableBytes(const QLis
 
 ScanResult FileContentScanWorkflow::createFinalScanResult(QList<DuplicateGroup> duplicateGroups,
                                                           const ScanOutcome outcome,
-                                                          const FileCollectionMetrics& collectionMetrics,
+                                                          const FileTreeEnumerationMetrics& fileTreeEnumerationMetrics,
                                                           const qint64 elapsedMilliseconds)
 {
     const DuplicateGroupMetrics duplicateMetrics = calculateDuplicateGroupMetrics(duplicateGroups);
@@ -524,10 +525,10 @@ ScanResult FileContentScanWorkflow::createFinalScanResult(QList<DuplicateGroup> 
     FileContentScanSummary summary{
         QDateTime::currentDateTimeUtc(),
         std::chrono::milliseconds(elapsedMilliseconds),
-        collectionMetrics.getScannedDirectoriesCount(),
-        collectionMetrics.getScannedFilesCount(),
-        collectionMetrics.getProblematicFilesCount(),
-        collectionMetrics.getTotalScannedBytes(),
+        fileTreeEnumerationMetrics.getScannedDirectoriesCount(),
+        fileTreeEnumerationMetrics.getScannedFilesCount(),
+        fileTreeEnumerationMetrics.getProblematicFilesCount(),
+        fileTreeEnumerationMetrics.getTotalScannedBytes(),
         static_cast<quint64>(duplicateGroups.size()),
         duplicateMetrics.getFilesCount(),
         duplicateMetrics.getTotalBytes(),

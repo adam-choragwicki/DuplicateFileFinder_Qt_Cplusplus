@@ -41,9 +41,7 @@ void LogManager::initialize(const Mode loggingMode, const Verbosity verbosity)
     qDebug() << "Logging initialized, mode =" << modeToString(loggingMode_) << ", verbosity =" << verbosityToString(verbosity_);
 }
 
-void LogManager::messageHandler(const QtMsgType type,
-                                const QMessageLogContext& context,
-                                const QString& msg)
+void LogManager::messageHandler(const QtMsgType type, const QMessageLogContext& context, const QString& msg)
 {
     // verbosity filtering
     bool shouldLog = false;
@@ -75,11 +73,16 @@ void LogManager::messageHandler(const QtMsgType type,
 
     switch (type)
     {
-        case QtDebugMsg:    level = "DEBUG"; break;
-        case QtInfoMsg:     level = "INFO"; break;
-        case QtWarningMsg:  level = "WARN"; break;
-        case QtCriticalMsg: level = "CRITICAL"; break;
-        case QtFatalMsg:    level = "FATAL"; break;
+        case QtDebugMsg: level = "DEBUG";
+            break;
+        case QtInfoMsg: level = "INFO";
+            break;
+        case QtWarningMsg: level = "WARN";
+            break;
+        case QtCriticalMsg: level = "CRITICAL";
+            break;
+        case QtFatalMsg: level = "FATAL";
+            break;
     }
 
     const QString timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss.zzz");
@@ -88,16 +91,10 @@ void LogManager::messageHandler(const QtMsgType type,
 
     if constexpr (ENABLE_CONTEXT_INFO)
     {
-        contextStr = QString(" (%1:%2)")
-                .arg(context.file ? context.file : "?")
-                .arg(context.line);
+        contextStr = QStringLiteral(" (%1:%2)").arg(context.file ? context.file : "?", QString::number(context.line));
     }
 
-    const QString formatted = QString("[%1] [%2] %3 %4")
-            .arg(timestamp)
-            .arg(level)
-            .arg(msg)
-            .arg(contextStr);
+    const QString formatted = QString("[%1] [%2] %3 %4").arg(timestamp, level, msg, contextStr);
 
     // Console output
     if (loggingMode_ == Mode::LogToConsoleOnly || loggingMode_ == Mode::LogToFileAndConsole)

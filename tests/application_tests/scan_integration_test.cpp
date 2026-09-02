@@ -25,7 +25,8 @@
 namespace
 {
     /// @brief Provides an isolated directory tree for application scan integration tests.
-    class ApplicationScanIntegrationTest : public TemporaryScanDirectoryTest {};
+    class ApplicationScanIntegrationTest : public TemporaryScanDirectoryTest
+    {};
 
     /// @brief Stores the user-visible properties captured from a modal message box.
     struct ObservedMessageBox
@@ -224,7 +225,7 @@ TEST_F(ApplicationScanIntegrationTest, DisplayDuplicateResults_WhenContentScanIs
     MainWindow mainWindow;
     Controller controller(model, mainWindow);
 
-    ASSERT_EQ(model.addScanDirectory(scanRootPath()).outcome, Model::AddScanDirectoryOutcome::Added);
+    ASSERT_EQ(model.addScanDirectory(scanRootPath()).getAddScanDirectoryOutcome(), Model::AddScanDirectoryOutcome::Added);
 
     auto* scanTypeComboBox = mainWindow.findChild<QComboBox*>(QStringLiteral("scanType_ComboBox"));
     auto* startScanButton = mainWindow.findChild<QPushButton*>(QStringLiteral("startScan_PushButton"));
@@ -293,7 +294,7 @@ TEST_F(ApplicationScanIntegrationTest, ReportFailure_WhenScanRootDoesNotExist)
     MainWindow mainWindow;
     Controller controller(model, mainWindow);
 
-    ASSERT_EQ(model.addScanDirectory(missingScanRootPath).outcome, Model::AddScanDirectoryOutcome::Added);
+    ASSERT_EQ(model.addScanDirectory(missingScanRootPath).getAddScanDirectoryOutcome(), Model::AddScanDirectoryOutcome::Added);
 
     auto* startScanButton = mainWindow.findChild<QPushButton*>(QStringLiteral("startScan_PushButton"));
     auto* exportAction = mainWindow.findChild<QAction*>(QStringLiteral("exportToHtml_Action"));
@@ -345,7 +346,7 @@ TEST_F(ApplicationScanIntegrationTest, ClearModelAndViewResult_WhenResultsTabClo
     MainWindow mainWindow;
     Controller controller(model, mainWindow);
 
-    ASSERT_EQ(model.addScanDirectory(scanRootPath()).outcome, Model::AddScanDirectoryOutcome::Added);
+    ASSERT_EQ(model.addScanDirectory(scanRootPath()).getAddScanDirectoryOutcome(), Model::AddScanDirectoryOutcome::Added);
     ASSERT_EQ(model.beginScan(), Model::ScanStartOutcome::Started);
     model.completeScan(test_helpers::createScanResultWithDuplicates());
 

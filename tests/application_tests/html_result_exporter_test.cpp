@@ -1,4 +1,4 @@
-#include "html_result_exporter.h"
+#include "reporting/html_result_exporter.h"
 #include "test_helpers/scoped_default_locale.h"
 
 #include <QDir>

@@ -1,5 +1,5 @@
 #include "application.h"
-#include "development_configuration_helper.h"
+#include "development/development_configuration_helper.h"
 
 #include <QApplication>
 #include <QDebug>

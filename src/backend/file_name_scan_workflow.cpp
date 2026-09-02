@@ -1,4 +1,5 @@
 #include "file_name_scan_workflow.h"
+#include "file_tree_enumeration/file_tree_enumerator.h"
 #include "scan_summary/file_name_scan_summary.h"
 #include <QDateTime>
 #include <QDebug>
@@ -56,31 +57,31 @@ ScanResult FileNameScanWorkflow::execute(const QStringList& rootDirectoryPaths, 
 
     scanProgressCallback({.scanPhase = FileNameScanPhase::EnumeratingFiles, .processedFilesCount = 0, .totalFilesCount = std::nullopt});
 
-    // Stage 1: Collecting files and grouping them by name
-    const FileCollectionResult fileCollectionResult = FileCollector::collectRecursively(rootDirectoryPaths,
-                                                                                        stopToken,
-                                                                                        [&filesByName, &enumeratedFilesCount, &scanProgressCallback](FileRecord file)
-                                                                                        {
-                                                                                            // visitor collecting files and grouping them by name
-                                                                                            const QString fileNameComparisonKey = getFileNameComparisonKey(file.getFileName());
-                                                                                            filesByName[fileNameComparisonKey].append(std::move(file));
-                                                                                            ++enumeratedFilesCount;
+    // Stage 1: Enumerating files and grouping them by name
+    const FileTreeEnumerationResult enumerationResult = FileTreeEnumerator::enumerateRecursively(rootDirectoryPaths,
+                                                                                                 stopToken,
+                                                                                                 [&filesByName, &enumeratedFilesCount, &scanProgressCallback](FileRecord file)
+                                                                                                 {
+                                                                                                     // visitor collecting files and grouping them by name
+                                                                                                     const QString fileNameComparisonKey = getFileNameComparisonKey(file.getFileName());
+                                                                                                     filesByName[fileNameComparisonKey].append(std::move(file));
+                                                                                                     ++enumeratedFilesCount;
 
-                                                                                            scanProgressCallback({.scanPhase = FileNameScanPhase::EnumeratingFiles, .processedFilesCount = enumeratedFilesCount, .totalFilesCount = std::nullopt});
-                                                                                        });
+                                                                                                     scanProgressCallback({.scanPhase = FileNameScanPhase::EnumeratingFiles, .processedFilesCount = enumeratedFilesCount, .totalFilesCount = std::nullopt});
+                                                                                                 });
 
-    if (fileCollectionResult.getStatus() == FileCollectionStatus::InvalidRootDirectory)
+    if (enumerationResult.getStatus() == FileTreeEnumerationStatus::InvalidRootDirectory)
     {
         outcome = ScanOutcome::Failed;
     }
-    else if (fileCollectionResult.getStatus() == FileCollectionStatus::Cancelled || stopToken.stop_requested())
+    else if (enumerationResult.getStatus() == FileTreeEnumerationStatus::Cancelled || stopToken.stop_requested())
     {
         outcome = ScanOutcome::Cancelled;
     }
     else
     {
         quint64 processedFilesCount = 0;
-        const quint64 collectedFilesCount = fileCollectionResult.getMetrics().getScannedFilesCount();
+        const quint64 collectedFilesCount = enumerationResult.getMetrics().getScannedFilesCount();
 
         scanProgressCallback({.scanPhase = FileNameScanPhase::GroupingFilesByName, .processedFilesCount = 0, .totalFilesCount = collectedFilesCount});
 
@@ -115,7 +116,7 @@ ScanResult FileNameScanWorkflow::execute(const QStringList& rootDirectoryPaths, 
 
         if (!stopToken.stop_requested())
         {
-            outcome = classifySuccessfulScan(fileCollectionResult.getMetrics(), duplicateGroups);
+            outcome = classifySuccessfulScan(enumerationResult.getMetrics(), duplicateGroups);
 
             scanProgressCallback({.scanPhase = FileNameScanPhase::BuildingScanResult, .processedFilesCount = collectedFilesCount, .totalFilesCount = collectedFilesCount});
         }
@@ -126,10 +127,10 @@ ScanResult FileNameScanWorkflow::execute(const QStringList& rootDirectoryPaths, 
     FileNameScanSummary summary{
         QDateTime::currentDateTimeUtc(),
         std::chrono::milliseconds(durationTimer.elapsed()),
-        fileCollectionResult.getMetrics().getScannedDirectoriesCount(),
-        fileCollectionResult.getMetrics().getScannedFilesCount(),
-        fileCollectionResult.getMetrics().getProblematicFilesCount(),
-        fileCollectionResult.getMetrics().getTotalScannedBytes(),
+        enumerationResult.getMetrics().getScannedDirectoriesCount(),
+        enumerationResult.getMetrics().getScannedFilesCount(),
+        enumerationResult.getMetrics().getProblematicFilesCount(),
+        enumerationResult.getMetrics().getTotalScannedBytes(),
         static_cast<quint64>(duplicateGroups.size()),
         duplicateMetrics.getFilesCount(),
         duplicateMetrics.getTotalBytes()

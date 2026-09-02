@@ -87,7 +87,7 @@ void Scanner::scan(const ScanRequest& scanRequest)
     }
 
     // Select the complete control-flow path before any scan work is scheduled.
-    std::shared_ptr<const ScanWorkflow> scanWorkflow;
+    std::shared_ptr<const AbstractScanWorkflow> scanWorkflow;
     ScanPhase initialScanPhase = FileNameScanPhase::EnumeratingFiles;
 
     switch (scanRequest.getScanType())
@@ -105,7 +105,7 @@ void Scanner::scan(const ScanRequest& scanRequest)
 
     if (!scanWorkflow)
     {
-        qFatal("Unknown ScanType value: %d", scanRequest.getScanType());
+        qFatal("Unknown ScanType value: %d", qToUnderlying(scanRequest.getScanType()));
     }
 
     isScanning_ = true;

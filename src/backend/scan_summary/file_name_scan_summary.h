@@ -1,9 +1,13 @@
 #pragma once
 
-#include "scan_summary/scan_summary.h"
+#include "scan_summary/abstract_scan_summary.h"
 
-class FileNameScanSummary final : public ScanSummary
+/// @brief Concrete summary produced by a file-name-based scan.
+///
+/// File-name scans require no workflow-specific metrics beyond the fields supplied by AbstractScanSummary.
+class FileNameScanSummary final : public AbstractScanSummary
 {
 public:
-    using ScanSummary::ScanSummary;
+    /// Exposes the common summary constructors for file-name scan results.
+    using AbstractScanSummary::AbstractScanSummary;
 };

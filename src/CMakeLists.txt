@@ -5,10 +5,9 @@ qt_add_executable(${PROJECT_NAME}
         main.cpp
         application.cpp application.h
         controller.cpp controller.h
-        file_size_formatter.h
-        html_result_exporter.cpp html_result_exporter.h
         log_manager.cpp log_manager.h
-        development_configuration_helper.cpp development_configuration_helper.h
+        reporting/html_result_exporter.cpp reporting/html_result_exporter.h
+        development/development_configuration_helper.cpp development/development_configuration_helper.h
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE .)
