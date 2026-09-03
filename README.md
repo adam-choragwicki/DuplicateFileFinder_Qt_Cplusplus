@@ -82,6 +82,12 @@ Duplicate File Finder is intentionally read-only. It provides duplicates discove
 removal. Unreadable files are skipped, recorded in the log, and reported to the user because the resulting scan may
 be incomplete.
 
+## Known limitations
+
+Hard links are treated as separate file paths. Multiple hard links to the same underlying file can therefore appear
+in duplicate results, and byte totals—including potentially recoverable disk space—may count the same physical
+storage more than once. Removing one hard link does not free the underlying file data while another link remains.
+
 ## Tests
 
 Tested using Google Test 1.17.0. The test suites cover the scan workflows, cancellation and failure paths, progress
