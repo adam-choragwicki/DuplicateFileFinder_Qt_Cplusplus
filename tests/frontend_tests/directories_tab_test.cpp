@@ -1,4 +1,5 @@
 #include "frontend/main_window.h"
+#include "frontend/scan_directories_tree_model.h"
 
 #include <QComboBox>
 #include <QDir>
@@ -12,19 +13,6 @@
 
 namespace
 {
-    /// @brief Removes every scan root created during `MainWindow` initialization or a preceding test step.
-    ///
-    /// @param mainWindow Window whose top-level scan roots are removed.
-    void removeAllScanRoots(MainWindow& mainWindow)
-    {
-        const QStringList scanRootPaths = mainWindow.getScanDirectoryPaths();
-
-        for (const QString& scanRootPath: scanRootPaths)
-        {
-            mainWindow.removeScanDirectory(scanRootPath);
-        }
-    }
-
     /// @brief Selects one directory-tree row and clears any preceding selection.
     ///
     /// @param directoriesTree Tree view whose selection is changed.
@@ -42,7 +30,7 @@ namespace
 /// Construct `MainWindow` and locate the scan-type combo box and description label populated during initialization.
 ///
 /// @par Procedure
-/// Inspect the available labels, select each entry in turn, call `MainWindow::getScanType()`, and read the
+/// Inspect the available labels, select each entry in turn, call `MainWindow::getScanTypeFromComboBox()`, and read the
 /// description shown below the selector after every selection.
 ///
 /// @par Expected results
@@ -71,23 +59,21 @@ TEST(DirectoriesTabTest, ReturnSelectedScanType_WhenScanTypeSelectionChanges)
     EXPECT_EQ(scanTypeDescriptionLabel->text().toStdString(), std::string("Finds files with matching names, ignoring letter case and the final extension. Their contents may differ."));
 }
 
-/// @brief Verifies that adding a directory creates one normalized top-level scan root.
+/// @brief Verifies that setting directory paths creates one normalized top-level scan root.
 ///
 /// @par Test setup
-/// Construct `MainWindow`, remove its initial scan root, and create a temporary `root/child` directory tree.
-/// Build an input path that reaches `root` through the redundant `child/..` suffix.
+/// Construct `MainWindow` and create a temporary `root/child` directory tree. Build an input path that reaches
+/// `root` through the redundant `child/..` suffix.
 ///
 /// @par Procedure
-/// Pass the redundant path to `MainWindow::addScanDirectory()` and inspect the directory tree and the paths
-/// returned by `MainWindow::getScanDirectoryPaths()`.
+/// Pass the redundant path to `MainWindow::setScanDirectoryPaths()` and inspect the directory tree's root item.
 ///
 /// @par Expected results
 /// - The tree contains exactly one top-level item.
-/// - The reported scan-root path is the normalized absolute path of `root`.
-TEST(DirectoriesTabTest, AddNormalizedScanRoot_WhenDirectoryIsAdded)
+/// - The root item's absolute-path data is the normalized absolute path of `root`.
+TEST(DirectoriesTabTest, DisplayNormalizedScanRoot_WhenDirectoryPathsAreSet)
 {
     MainWindow mainWindow;
-    removeAllScanRoots(mainWindow);
 
     QTemporaryDir temporaryDirectory;
     ASSERT_TRUE(temporaryDirectory.isValid());
@@ -98,42 +84,42 @@ TEST(DirectoriesTabTest, AddNormalizedScanRoot_WhenDirectoryIsAdded)
 
     const QString redundantScanRootPath = QDir(childPath).filePath(QStringLiteral(".."));
     const QString expectedScanRootPath = QDir(scanRootPath).absolutePath();
-    mainWindow.addScanDirectory(redundantScanRootPath);
+    mainWindow.setScanDirectoryPaths({redundantScanRootPath});
 
     const auto* directoriesTree = mainWindow.findChild<QTreeView*>(QStringLiteral("directories_TreeView"));
     ASSERT_NE(directoriesTree, nullptr);
     ASSERT_NE(directoriesTree->model(), nullptr);
     ASSERT_EQ(directoriesTree->model()->rowCount(), 1);
 
-    const QStringList scanRootPaths = mainWindow.getScanDirectoryPaths();
-    ASSERT_EQ(scanRootPaths.size(), 1);
-    EXPECT_EQ(scanRootPaths.constFirst().toStdString(), expectedScanRootPath.toStdString());
+    const QModelIndex scanRootIndex = directoriesTree->model()->index(0, 0);
+    ASSERT_TRUE(scanRootIndex.isValid());
+    EXPECT_EQ(scanRootIndex.data(ScanDirectoriesTreeModel::AbsolutePathRole).toString(), expectedScanRootPath);
 }
 
 /// @brief Verifies that directory removal is available only for a selected top-level scan root.
 ///
 /// @par Test setup
-/// Construct `MainWindow`, replace its initial root with a temporary root containing one child directory, and
-/// locate the directory tree and Remove directory button.
+/// Construct `MainWindow`, configure a temporary root containing one child directory, and locate the directory tree
+/// and Remove directory button.
 ///
 /// @par Procedure
-/// Observe the button after adding the selected root, after clearing the selection, after selecting the root
-/// again, and after expanding the root and selecting its child.
+/// Observe the button and selected-root query after setting the root, after clearing the selection, after selecting
+/// the root again, and after expanding the root and selecting its child.
 ///
 /// @par Expected results
 /// - The button is enabled while the top-level root is selected.
 /// - The button is disabled when nothing or a child directory is selected.
+/// - The selected-root query returns the root only for a top-level selection and is empty otherwise.
 TEST(DirectoriesTabTest, EnableDirectoryRemoval_OnlyWhenScanRootIsSelected)
 {
     MainWindow mainWindow;
-    removeAllScanRoots(mainWindow);
 
     QTemporaryDir temporaryDirectory;
     ASSERT_TRUE(temporaryDirectory.isValid());
 
     const QString scanRootPath = QDir(temporaryDirectory.path()).filePath(QStringLiteral("root"));
     ASSERT_TRUE(QDir().mkpath(QDir(scanRootPath).filePath(QStringLiteral("child"))));
-    mainWindow.addScanDirectory(scanRootPath);
+    mainWindow.setScanDirectoryPaths({scanRootPath});
 
     auto* directoriesTree = mainWindow.findChild<QTreeView*>(QStringLiteral("directories_TreeView"));
     const auto* removeDirectoryButton = mainWindow.findChild<QPushButton*>(QStringLiteral("removeDirectory_PushButton"));
@@ -145,82 +131,41 @@ TEST(DirectoriesTabTest, EnableDirectoryRemoval_OnlyWhenScanRootIsSelected)
     const QModelIndex scanRootIndex = directoriesTree->model()->index(0, 0);
     ASSERT_TRUE(scanRootIndex.isValid());
     EXPECT_TRUE(removeDirectoryButton->isEnabled());
+    EXPECT_EQ(mainWindow.getSelectedScanDirectoryPath(), QDir(scanRootPath).absolutePath());
 
     directoriesTree->clearSelection();
     EXPECT_FALSE(removeDirectoryButton->isEnabled());
+    EXPECT_TRUE(mainWindow.getSelectedScanDirectoryPath().isEmpty());
 
     selectDirectory(*directoriesTree, scanRootIndex);
     EXPECT_TRUE(removeDirectoryButton->isEnabled());
+    EXPECT_EQ(mainWindow.getSelectedScanDirectoryPath(), QDir(scanRootPath).absolutePath());
 
     directoriesTree->expand(scanRootIndex);
     ASSERT_EQ(directoriesTree->model()->rowCount(scanRootIndex), 1);
     directoriesTree->clearSelection();
     selectDirectory(*directoriesTree, directoriesTree->model()->index(0, 0, scanRootIndex));
     EXPECT_FALSE(removeDirectoryButton->isEnabled());
-}
-
-/// @brief Verifies that removing a selected child cannot remove its top-level scan root.
-///
-/// @par Test setup
-/// Construct `MainWindow`, add a temporary root containing one child directory, expand it, and select the child.
-///
-/// @par Procedure
-/// Call `MainWindow::removeSelectedScanDirectory()` and inspect both the tree and the reported scan-root paths.
-///
-/// @par Expected results
-/// - The top-level root and its child remain in the tree.
-/// - `MainWindow::getScanDirectoryPaths()` still reports the original root as its only entry.
-TEST(DirectoriesTabTest, KeepScanRoot_WhenChildDirectoryRemovalIsRequested)
-{
-    MainWindow mainWindow;
-    removeAllScanRoots(mainWindow);
-
-    QTemporaryDir temporaryDirectory;
-    ASSERT_TRUE(temporaryDirectory.isValid());
-
-    const QString scanRootPath = QDir(temporaryDirectory.path()).filePath(QStringLiteral("root"));
-    ASSERT_TRUE(QDir().mkpath(QDir(scanRootPath).filePath(QStringLiteral("child"))));
-    mainWindow.addScanDirectory(scanRootPath);
-
-    auto* directoriesTree = mainWindow.findChild<QTreeView*>(QStringLiteral("directories_TreeView"));
-    ASSERT_NE(directoriesTree, nullptr);
-    ASSERT_NE(directoriesTree->model(), nullptr);
-    ASSERT_EQ(directoriesTree->model()->rowCount(), 1);
-
-    const QModelIndex scanRootIndex = directoriesTree->model()->index(0, 0);
-    directoriesTree->expand(scanRootIndex);
-    ASSERT_EQ(directoriesTree->model()->rowCount(scanRootIndex), 1);
-
-    directoriesTree->clearSelection();
-    selectDirectory(*directoriesTree, directoriesTree->model()->index(0, 0, scanRootIndex));
-    mainWindow.removeSelectedScanDirectory();
-
-    ASSERT_EQ(directoriesTree->model()->rowCount(), 1);
-    EXPECT_EQ(directoriesTree->model()->rowCount(scanRootIndex), 1);
-
-    const QStringList scanRootPaths = mainWindow.getScanDirectoryPaths();
-    ASSERT_EQ(scanRootPaths.size(), 1);
-    EXPECT_EQ(scanRootPaths.constFirst().toStdString(), QDir(scanRootPath).absolutePath().toStdString());
+    EXPECT_TRUE(mainWindow.getSelectedScanDirectoryPath().isEmpty());
 }
 
 /// @brief Verifies that expanding a scan root lazily populates its immediate child directories exactly once.
 ///
 /// @par Test setup
-/// Construct `MainWindow` and add a temporary root containing two immediate child directories, one nested
+/// Construct `MainWindow` and configure a temporary root containing two immediate child directories, one nested
 /// directory, and one ordinary file.
 ///
 /// @par Procedure
-/// Expand the root, inspect its children, expand it a second time, and then inspect the top-level scan-root list.
+/// Expand the root, inspect its children, expand it a second time, and then inspect the root item's absolute path.
 ///
 /// @par Expected results
 /// - Only the two immediate directories appear beneath the root, ordered by name; the ordinary file is omitted.
 /// - The child containing a nested directory remains expandable.
 /// - Expanding the root again does not duplicate child items.
-/// - Only the top-level root is returned as a scan path.
+/// - The top-level item retains the configured root's absolute path.
 TEST(DirectoriesTabTest, PopulateChildDirectoriesOnce_WhenScanRootIsExpanded)
 {
     MainWindow mainWindow;
-    removeAllScanRoots(mainWindow);
 
     QTemporaryDir temporaryDirectory;
     ASSERT_TRUE(temporaryDirectory.isValid());
@@ -235,7 +180,7 @@ TEST(DirectoriesTabTest, PopulateChildDirectoriesOnce_WhenScanRootIsExpanded)
     ASSERT_TRUE(ordinaryFile.open(QIODevice::WriteOnly));
     ordinaryFile.close();
 
-    mainWindow.addScanDirectory(scanRootPath);
+    mainWindow.setScanDirectoryPaths({scanRootPath});
 
     auto* directoriesTree = mainWindow.findChild<QTreeView*>(QStringLiteral("directories_TreeView"));
     ASSERT_NE(directoriesTree, nullptr);
@@ -258,7 +203,6 @@ TEST(DirectoriesTabTest, PopulateChildDirectoriesOnce_WhenScanRootIsExpanded)
     directoriesTree->expand(scanRootIndex);
     EXPECT_EQ(directoriesTree->model()->rowCount(scanRootIndex), 2);
 
-    const QStringList scanRootPaths = mainWindow.getScanDirectoryPaths();
-    ASSERT_EQ(scanRootPaths.size(), 1);
-    EXPECT_EQ(scanRootPaths.constFirst().toStdString(), QDir(scanRootPath).absolutePath().toStdString());
+    EXPECT_EQ(scanRootIndex.data(ScanDirectoriesTreeModel::AbsolutePathRole).toString(),
+              QDir(scanRootPath).absolutePath());
 }

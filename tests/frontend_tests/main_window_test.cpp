@@ -228,7 +228,7 @@ TEST(MainWindowTest, RequestFileReveal_WhenResultRowIsDoubleClicked)
 /// @brief Verifies that user-facing controls emit the request signals consumed by the controller.
 ///
 /// @par Test setup
-/// Construct `MainWindow`, add a temporary scan root so directory removal is available, locate the Add directory,
+/// Construct `MainWindow`, configure a temporary scan root so directory removal is available, locate the Add directory,
 /// Remove directory, Start scan, and Export controls, and attach a counter to each corresponding request signal.
 ///
 /// @par Procedure
@@ -243,7 +243,7 @@ TEST(MainWindowTest, EmitExpectedRequestSignals_WhenControlsAreActivated)
     MainWindow mainWindow;
     QTemporaryDir temporaryDirectory;
     ASSERT_TRUE(temporaryDirectory.isValid());
-    mainWindow.addScanDirectory(temporaryDirectory.path());
+    mainWindow.setScanDirectoryPaths({temporaryDirectory.path()});
 
     auto* addDirectoryButton = mainWindow.findChild<QPushButton*>(QStringLiteral("addDirectory_PushButton"));
     auto* removeDirectoryButton = mainWindow.findChild<QPushButton*>(QStringLiteral("removeDirectory_PushButton"));

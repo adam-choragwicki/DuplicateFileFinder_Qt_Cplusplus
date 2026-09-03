@@ -59,21 +59,11 @@ public:
     void showScanResult(const ScanResult& scanResult);
     /// Removes all displayed groups, disables export, and hides the results tab.
     void clearScanResult();
-    /// Returns only top-level scan roots from the directory presentation model.
-    [[nodiscard]] QStringList getScanDirectoryPaths() const;
     /// Returns the selected top-level scan root, or an empty string for no, multiple, or child selection.
     [[nodiscard]] QString getSelectedScanDirectoryPath() const;
     /// Replaces all presented scan roots and selects the last root when available.
     /// @param[in] directoryPaths Complete root list in presentation order.
     void setScanDirectoryPaths(const QStringList& directoryPaths);
-    /// Appends one absolute root path to the presentation model.
-    /// @param[in] directoryPath Directory path to append.
-    void addScanDirectory(const QString& directoryPath);
-    /// Removes every presented root equal to the supplied absolute path.
-    /// @param[in] directoryPath Directory path to remove.
-    void removeScanDirectory(const QString& directoryPath);
-    /// Removes the currently selected item only when it is a top-level scan root.
-    void removeSelectedScanDirectory();
     /// Returns duplicate groups in their current results-table presentation order.
     [[nodiscard]] const QList<DuplicateGroup>& getDisplayedDuplicateGroups() const;
 

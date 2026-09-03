@@ -4,7 +4,6 @@
 #include "ui_main_window.h"
 
 #include <QComboBox>
-#include <QDir>
 #include <QMessageBox>
 #include <QScreen>
 #include <QTabBar>
@@ -158,11 +157,6 @@ void MainWindow::clearScanResult()
     ui->main_TabWidget->setTabVisible(resultsTabIndex, false);
 }
 
-QStringList MainWindow::getScanDirectoryPaths() const
-{
-    return directoriesTreeModel_->getRootDirectoryPaths();
-}
-
 QString MainWindow::getSelectedScanDirectoryPath() const
 {
     const QModelIndexList selectedDirectoryIndexes = ui->directories_TreeView->selectionModel()->selectedRows();
@@ -186,34 +180,6 @@ void MainWindow::setScanDirectoryPaths(const QStringList& directoryPaths)
     }
 
     updateDirectoryActionStates();
-}
-
-void MainWindow::addScanDirectory(const QString& directoryPath)
-{
-    QStringList directoryPaths = directoriesTreeModel_->getRootDirectoryPaths();
-    directoryPaths.append(QDir(directoryPath).absolutePath());
-    setScanDirectoryPaths(directoryPaths);
-}
-
-void MainWindow::removeScanDirectory(const QString& directoryPath)
-{
-    QStringList directoryPaths = directoriesTreeModel_->getRootDirectoryPaths();
-    directoryPaths.removeAll(QDir(directoryPath).absolutePath());
-    setScanDirectoryPaths(directoryPaths);
-}
-
-void MainWindow::removeSelectedScanDirectory()
-{
-    // Child items only visualize the contents of a selected scan root. Only top-level roots can
-    // be removed from the set of directories that will be scanned.
-    const QString selectedScanDirectoryPath = getSelectedScanDirectoryPath();
-
-    if (selectedScanDirectoryPath.isEmpty())
-    {
-        return;
-    }
-
-    removeScanDirectory(selectedScanDirectoryPath);
 }
 
 const QList<DuplicateGroup>& MainWindow::getDisplayedDuplicateGroups() const

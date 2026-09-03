@@ -17,6 +17,7 @@
 #include <QTableView>
 #include <QTimer>
 #include <QToolButton>
+#include <QTreeView>
 
 #include <gtest/gtest.h>
 
@@ -179,10 +180,13 @@ TEST(ControllerIntegrationTest, RejectScanAndExplainReason_WhenNoDirectoriesAreS
     Controller controller(model, mainWindow);
 
     auto* startScanButton = mainWindow.findChild<QPushButton*>(QStringLiteral("startScan_PushButton"));
+    const auto* directoriesTree = mainWindow.findChild<QTreeView*>(QStringLiteral("directories_TreeView"));
 
     ASSERT_NE(startScanButton, nullptr);
+    ASSERT_NE(directoriesTree, nullptr);
+    ASSERT_NE(directoriesTree->model(), nullptr);
     ASSERT_TRUE(model.getScanDirectoryPaths().isEmpty());
-    ASSERT_TRUE(mainWindow.getScanDirectoryPaths().isEmpty());
+    ASSERT_EQ(directoriesTree->model()->rowCount(), 0);
 
     const ObservedMessageBox messageBox = activateAndObserveMessageBox(
         [startScanButton] { startScanButton->click(); },
