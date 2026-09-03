@@ -74,6 +74,8 @@ private:
 
     /// Returns the immediate child directories to expose below the specified path.
     [[nodiscard]] static QFileInfoList findChildDirectories(const QString& directoryPath);
+    /// Returns as soon as an immediate child directory is found.
+    [[nodiscard]] static bool containsChildDirectory(const QString& directoryPath);
     /// Returns a node's child collection, treating a null node as the invisible root of the model.
     [[nodiscard]] const std::vector<std::unique_ptr<DirectoryNode>>& childrenOf(const DirectoryNode* parentNode) const;
     /// Mutable counterpart used while constructing the tree.

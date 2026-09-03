@@ -1,7 +1,7 @@
 #include "scan_directories_tree_model.h"
 
 #include <QApplication>
-#include <QDir>
+#include <QDirIterator>
 #include <QStyle>
 
 ScanDirectoriesTreeModel::ScanDirectoriesTreeModel(QObject* parent) : QAbstractItemModel(parent),
@@ -21,6 +21,17 @@ QFileInfoList ScanDirectoriesTreeModel::findChildDirectories(const QString& dire
     constexpr QDir::SortFlags directorySorting = QDir::Name | QDir::IgnoreCase;
 
     return QDir(directoryPath).entryInfoList(directoryFilters, directorySorting);
+}
+
+bool ScanDirectoriesTreeModel::containsChildDirectory(const QString& directoryPath)
+{
+    constexpr QDir::Filters directoryFilters = QDir::Dirs
+                                               | QDir::NoDotAndDotDot
+                                               | QDir::Hidden
+                                               | QDir::System;
+
+    QDirIterator childDirectoryIterator(directoryPath, directoryFilters);
+    return childDirectoryIterator.hasNext();
 }
 
 QModelIndex ScanDirectoriesTreeModel::index(const int row, const int column, const QModelIndex& parent) const
@@ -159,7 +170,7 @@ void ScanDirectoriesTreeModel::setRootDirectoryPaths(const QStringList& director
         rootDirectory->absolutePath = normalizedDirectoryPath;
         rootDirectory->displayText = QDir::toNativeSeparators(normalizedDirectoryPath);
         // Probe one level ahead so hasChildren() can show an expansion control without loading child nodes yet.
-        rootDirectory->containsChildDirectories = !findChildDirectories(normalizedDirectoryPath).isEmpty();
+        rootDirectory->containsChildDirectories = containsChildDirectory(normalizedDirectoryPath);
         rootDirectories_.push_back(std::move(rootDirectory));
     }
 
@@ -218,7 +229,7 @@ void ScanDirectoriesTreeModel::populateChildren(const QModelIndex& directoryInde
         childNode->displayText = childDirectory.fileName();
         childNode->parent = directoryNode;
         // Cache whether this child is expandable, but defer allocating its child nodes until it is expanded.
-        childNode->containsChildDirectories = !findChildDirectories(childNode->absolutePath).isEmpty();
+        childNode->containsChildDirectories = containsChildDirectory(childNode->absolutePath);
         directoryNode->children.push_back(std::move(childNode));
     }
 

@@ -160,7 +160,7 @@ TEST(DirectoriesTabTest, EnableDirectoryRemoval_OnlyWhenScanRootIsSelected)
 ///
 /// @par Expected results
 /// - Only the two immediate directories appear beneath the root, ordered by name; the ordinary file is omitted.
-/// - The child containing a nested directory remains expandable.
+/// - The child containing a nested directory remains expandable, while the empty child does not.
 /// - Expanding the root again does not duplicate child items.
 /// - The top-level item retains the configured root's absolute path.
 TEST(DirectoriesTabTest, PopulateChildDirectoriesOnce_WhenScanRootIsExpanded)
@@ -198,6 +198,7 @@ TEST(DirectoriesTabTest, PopulateChildDirectoriesOnce_WhenScanRootIsExpanded)
     EXPECT_EQ(firstChildIndex.data().toString().toStdString(), std::string("first"));
     EXPECT_EQ(secondChildIndex.data().toString().toStdString(), std::string("second"));
     EXPECT_TRUE(directoriesTree->model()->hasChildren(firstChildIndex));
+    EXPECT_FALSE(directoriesTree->model()->hasChildren(secondChildIndex));
 
     directoriesTree->collapse(scanRootIndex);
     directoriesTree->expand(scanRootIndex);
