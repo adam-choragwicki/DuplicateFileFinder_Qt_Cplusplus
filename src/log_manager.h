@@ -2,6 +2,9 @@
 
 #include <QFile>
 #include <QTextStream>
+#include <atomic>
+#include <memory>
+#include <mutex>
 
 /// @brief Configures Qt message routing, severity filtering, and optional persistent log output.
 ///
@@ -35,9 +38,15 @@ public:
     };
 
     /// Installs the Qt message handler and opens the log file when the selected mode requires one.
+    /// Must be called exactly once, before any worker thread that can emit Qt log messages is started.
+    /// A repeated call is a fatal programming error and terminates the application.
     /// @param[in] loggingMode Destination selection for accepted messages.
     /// @param[in] verbosity Minimum accepted message severity.
     static void initialize(Mode loggingMode = Mode::LogToFileAndConsole, Verbosity verbosity = Verbosity::Debug);
+
+    /// Restores Qt's default message handler and releases the active file-logging resources.
+    /// Must be called after all worker threads that can emit Qt log messages have stopped.
+    static void shutdown();
 
 private:
     /// Filters, formats, and routes one message received from Qt's global logging system.
@@ -57,6 +66,12 @@ private:
     static inline std::unique_ptr<QFile> logFile_;
     /// Text stream attached to logFile_ while file logging is active.
     static inline std::unique_ptr<QTextStream> logStream_;
+
+    /// Serializes complete log records emitted concurrently by Qt message producers.
+    static inline std::mutex outputMutex_;
+
+    /// Rejects every initialization attempt after the first, including concurrent attempts.
+    static inline std::atomic_bool initialized_ = false;
 
     /// Enables source-file and line-number fields in formatted log messages.
     static constexpr bool ENABLE_CONTEXT_INFO = false;

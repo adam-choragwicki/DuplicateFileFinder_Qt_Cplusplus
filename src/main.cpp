@@ -4,6 +4,8 @@
 
 int main(int argc, char* argv[])
 {
+    int exitCode = 0;
+
     try
     {
 #if defined(QT_DEBUG)
@@ -16,16 +18,20 @@ int main(int argc, char* argv[])
 
         Application application;
 
-        return QApplication::exec();
+        exitCode = QApplication::exec();
     }
     catch (const std::exception& e)
     {
         qCritical() << "Unhandled exception:" << e.what();
-        return 1;
+        exitCode = 1;
     }
     catch (...)
     {
         qCritical() << "Unhandled unknown exception";
-        return 1;
+        exitCode = 1;
     }
+
+    LogManager::shutdown();
+
+    return exitCode;
 }

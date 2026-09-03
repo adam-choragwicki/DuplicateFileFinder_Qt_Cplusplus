@@ -3,6 +3,11 @@
 
 void LogManager::initialize(const Mode loggingMode, const Verbosity verbosity)
 {
+    if (initialized_.exchange(true))
+    {
+        qFatal("LogManager::initialize() must be called exactly once");
+    }
+
     loggingMode_ = loggingMode;
     verbosity_ = verbosity;
 
@@ -39,6 +44,16 @@ void LogManager::initialize(const Mode loggingMode, const Verbosity verbosity)
     qInstallMessageHandler(messageHandler);
 
     qDebug() << "Logging initialized, mode =" << modeToString(loggingMode_) << ", verbosity =" << verbosityToString(verbosity_);
+}
+
+void LogManager::shutdown()
+{
+    qInstallMessageHandler(nullptr);
+
+    const std::scoped_lock lock(outputMutex_);
+
+    logStream_.reset();
+    logFile_.reset();
 }
 
 void LogManager::messageHandler(const QtMsgType type, const QMessageLogContext& context, const QString& msg)
@@ -96,6 +111,8 @@ void LogManager::messageHandler(const QtMsgType type, const QMessageLogContext& 
 
     const QString formatted = QString("[%1] [%2] %3 %4").arg(timestamp, level, msg, contextStr);
 
+    const std::scoped_lock lock(outputMutex_);
+
     // Console output
     if (loggingMode_ == Mode::LogToConsoleOnly || loggingMode_ == Mode::LogToFileAndConsole)
     {
@@ -108,11 +125,6 @@ void LogManager::messageHandler(const QtMsgType type, const QMessageLogContext& 
     {
         *logStream_ << formatted << "\n";
         logStream_->flush();
-    }
-
-    if (type == QtFatalMsg)
-    {
-        abort();
     }
 }
 
