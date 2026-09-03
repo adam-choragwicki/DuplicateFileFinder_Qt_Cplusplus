@@ -121,3 +121,13 @@ Run all tests with:
 ```shell
 ctest --test-dir build -C Release --output-on-failure
 ```
+
+## License
+
+Copyright © 2026 Adam Choragwicki. All rights reserved.
+
+The source code is publicly available for inspection and evaluation, including portfolio review, recruitment, technical assessment, and automated analysis. It is not open-source software and may not be reused, modified, redistributed, incorporated into another project, or commercially exploited without permission.
+
+See [LICENSE](LICENSE) for the complete terms.
+
+This project also uses third-party software, including Qt and GoogleTest, which remains subject to its respective license terms. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details.
